@@ -4,6 +4,8 @@ import cors from 'cors';
 import morgan from 'morgan';
 import Reading from './models/Reading.js';
 
+
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/esp32db';
