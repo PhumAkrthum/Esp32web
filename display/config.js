@@ -1,0 +1,6 @@
+window.CONFIG = {
+  API_BASE: 'http://172.20.10.3:8080',
+  DEVICE_ID: 'esp32-1',
+  ONLINE_THRESHOLD_SEC: 30,
+  POLL_MS: 5000
+};

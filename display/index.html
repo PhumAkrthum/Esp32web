@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ESP32 Temperature Dashboard</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script defer src="/config.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>ESP32 DHT11 Monitor</h1>
+      <div id="status" class="status offline"><span class="dot"></span><span class="label">Disconnected</span></div>
+    </header>
+
+    <main>
+      <div id="card" class="card hidden">
+        <div class="reading">
+          <div class="value" id="temp">--.-</div>
+          <div class="unit">°C</div>
+        </div>
+        <div class="reading small">
+          <div class="value" id="hum">--</div>
+          <div class="unit">%RH</div>
+        </div>
+        <div class="meta">
+          <div>Device: <span id="dev"></span></div>
+          <div>Last update: <span id="last"></span></div>
+        </div>
+      </div>
+
+      <p id="hint">Connect your ESP32 and flash the firmware. Data will appear here when online.</p>
+    </main>
+  </div>
+</body>
+</html>
