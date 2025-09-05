@@ -62,7 +62,7 @@
         </div>
       </section>
 
-      <!-- การ์ดอนิเมะ (ตกแต่งพื้นที่ว่าง) -->
+      <!-- การ์ดอนิเมะ -->
       <section class="card anime" aria-label="anime card">
         <div class="anime-wrap">
           <svg class="mascot" viewBox="0 0 200 140" aria-hidden="true">
@@ -86,15 +86,15 @@
           <div class="bubble">
             <div class="sparkles"></div>
             <h2>ESP-คุง พร้อมใช้!</h2>
-            <p class="dim">แดชบอร์ดสีสดใส สไตล์การ์ตูน ✨</p>
+            <p class="dim">แดชบอร์ดโทนสดใส สไตล์การ์ตูน ✨</p>
           </div>
         </div>
       </section>
 
-      <!-- กราฟเดียว -->
-      <section class="card timeline">
+      <!-- Trends: แยก 3 กราฟ -->
+      <section class="card trends">
         <div class="card-head">
-          <h2>Live Trend</h2>
+          <h2>Live Trends</h2>
           <div class="tabs">
             <button class="btn ghost small range" data-limit="50">Last 50</button>
             <button class="btn ghost small range" data-limit="200">Last 200</button>
@@ -102,17 +102,22 @@
           </div>
         </div>
 
-        <!-- toggle series (กดได้จริง) -->
-        <div class="toggles">
-          <button class="toggle active" data-series="t"><span class="dot t"></span> Temp</button>
-          <button class="toggle active" data-series="h"><span class="dot h"></span> Humidity</button>
-          <button class="toggle active" data-series="d"><span class="dot d"></span> Dew</button>
+        <div class="charts">
+          <div class="chartbox">
+            <div class="chart-head"><span class="dot t"></span> Temperature (°C) <span id="lastT" class="lastval">—</span></div>
+            <canvas id="chartT" class="responsive" data-ratio="5"></canvas>
+          </div>
+          <div class="chartbox">
+            <div class="chart-head"><span class="dot h"></span> Humidity (%RH) <span id="lastH" class="lastval">—</span></div>
+            <canvas id="chartH" class="responsive" data-ratio="5"></canvas>
+          </div>
+          <div class="chartbox">
+            <div class="chart-head"><span class="dot d"></span> Dew Point (°C) <span id="lastD" class="lastval">—</span></div>
+            <canvas id="chartD" class="responsive" data-ratio="5"></canvas>
+          </div>
         </div>
 
-        <canvas id="timeline" class="responsive" data-ratio="3.2" aria-label="Temp / Humidity / Dew timeline"></canvas>
-        <div class="dim tiny">
-          ใช้ /api/readings (รองรับ limit / sort / ช่วงเวลา) • มีตัวเลขแกน X/Y และ Δt ระหว่างจุด
-        </div>
+        <div class="dim tiny">แต่ละกราฟมีแกนตัวเลขของตัวเอง + เส้นตาราง + ป้าย Now (กราฟอุณหภูมิมี Δt ระหว่างจุด)</div>
       </section>
 
       <!-- การ์ดสถิติ (ไม่ใช่กราฟ) -->

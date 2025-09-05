@@ -1,5 +1,4 @@
-// display/app.js
-// กราฟเดียว + ตัวเลขแกน X/Y + Δt ต่อช่วง + ปุ่ม toggle series ที่กดได้ + การ์ดสถิติ
+// แยกกราฟ 3 ใบ + ตัวเลขแกน X/Y + Now badge (+ Δt บนกราฟ Temp)
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
   const API_BASE   = CFG.API_BASE || "";
@@ -18,7 +17,15 @@
     tempRing: document.getElementById("tempRing"),
     humBar: document.getElementById("humBar"),
     card: document.getElementById("card"),
-    timeline: document.getElementById("timeline"),
+    // charts
+    chartT: document.getElementById("chartT"),
+    chartH: document.getElementById("chartH"),
+    chartD: document.getElementById("chartD"),
+    // last text on headers
+    lastT: document.getElementById("lastT"),
+    lastH: document.getElementById("lastH"),
+    lastD: document.getElementById("lastD"),
+    // extras
     themeToggle: document.getElementById("themeToggle"),
     yr: document.getElementById("yr"),
     empty: document.getElementById("emptyHint"),
@@ -75,10 +82,9 @@
   }
 
   // canvas utils
-  const state = { timeline: [], show: {t:true,h:true,d:true} };
   function fitCanvas(canvas){
     if(!canvas) return {w:0,h:0,ctx:null};
-    const ratio = Number(canvas.dataset.ratio)||3.2;
+    const ratio = Number(canvas.dataset.ratio)||5;
     const cw = Math.max(100, Math.floor(canvas.clientWidth || canvas.parentElement?.clientWidth || 300));
     const ch = Math.max(120, Math.floor(cw/ratio));
     const dpr = Math.min(2, window.devicePixelRatio||1);
@@ -89,12 +95,10 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);
     return {w:cw,h:ch,ctx};
   }
-
-  // badges
-  function badge(ctx, x, y, text, stroke, fillBg, opts={}){
+  function badge(ctx, x, y, text, stroke, fillBg, small=false){
     ctx.save();
-    ctx.font = (opts.small?'600 11px':'bold 13px') + ' system-ui, -apple-system, Segoe UI, Roboto';
-    const padX=opts.small?8:10, padY=opts.small?4:6, r=opts.small?7:8, h=opts.small?20:22;
+    ctx.font = (small?'600 11px':'bold 13px') + ' system-ui, -apple-system, Segoe UI, Roboto';
+    const padX=small?8:10, padY=small?4:6, r=small?7:8, h=small?20:22;
     const w = ctx.measureText(text).width + padX*2;
     ctx.beginPath();
     ctx.moveTo(x+r,y);
@@ -105,110 +109,86 @@
     ctx.closePath();
     ctx.fillStyle = fillBg; ctx.fill();
     ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = "#fff"; ctx.fillText(text, x+padX, y+(opts.small?14:15));
+    ctx.fillStyle = "#fff"; ctx.fillText(text, x+padX, y+(small?14:15));
     ctx.restore();
   }
 
-  // draw
-  function drawTimeline(canvas, series){
+  // draw single chart
+  function drawChart(canvas, rows, key, color, withDelta=false){
     const {w:W,h:H,ctx} = fitCanvas(canvas);
-    if(!ctx) return;
+    if(!ctx){ return; }
     ctx.clearRect(0,0,W,H);
-    if(series.length<2){
+    if(rows.length<2){
       ctx.globalAlpha=.7; ctx.fillStyle="#fff"; ctx.fillText("No history",14,22); ctx.globalAlpha=1; return;
     }
 
-    const padL=48, padR=46, padT=12, padB=38;
+    const padL=46, padR=16, padT=10, padB=30;
     const X=(i,N)=> padL + (W-padL-padR)*(i/Math.max(1,N-1));
+    const yVals = rows.map(r=>r[key]).filter(Number.isFinite);
+    const mn=Math.min(...yVals), mx=Math.max(...yVals), span=(mx-mn)||1;
+    const mapY = v => padT + (H-padT-padB) * (1 - (v - mn)/span);
 
-    // ranges
-    const tvals=series.map(s=>s.t), hvals=series.map(s=>s.h), dvals=series.map(s=>s.d);
-    const minT=Math.min(...tvals, ...dvals), maxT=Math.max(...tvals, ...dvals);
-    const minH=Math.min(...hvals), maxH=Math.max(...hvals);
-    const Rt={mn:minT, mx:maxT, span:(maxT-minT)||1};
-    const Rh={mn:minH, mx:maxH, span:(maxH-minH)||1};
-    const mapYT=v => padT + (H-padT-padB)*(1-(v-Rt.mn)/Rt.span);
-    const mapYH=v => padT + (H-padT-padB)*(1-(v-Rh.mn)/Rh.span);
-
-    // grid + axes
-    ctx.strokeStyle="rgba(255,255,255,.25)";
+    // axes + grid
+    ctx.strokeStyle="rgba(255,255,255,.28)";
     ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, H-padB); ctx.stroke(); // y-left
-    ctx.beginPath(); ctx.moveTo(W-padR, padT); ctx.lineTo(W-padR, H-padB); ctx.stroke(); // y-right
-    ctx.beginPath(); ctx.moveTo(padL, H-padB); ctx.lineTo(W-padR, H-padB); ctx.stroke(); // x
+    ctx.beginPath(); ctx.moveTo(padL, padT); ctx.lineTo(padL, H-padB); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(padL, H-padB); ctx.lineTo(W-padR, H-padB); ctx.stroke();
 
-    // y ticks left (Temp/Dew)
-    ctx.fillStyle="rgba(255,255,255,.75)"; ctx.font="12px system-ui";
+    ctx.fillStyle="rgba(255,255,255,.8)"; ctx.font="12px system-ui";
     const ySteps=5;
     for(let i=0;i<=ySteps;i++){
-      const v = Rt.mn + (Rt.span)*(i/ySteps);
-      const y = mapYT(v);
+      const v = mn + span*(i/ySteps);
+      const y = mapY(v);
       ctx.globalAlpha=.18; ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(W-padR, y); ctx.stroke(); ctx.globalAlpha=1;
-      ctx.fillText(v.toFixed(0), 6, y+4);
-    }
-    // y ticks right (Hum)
-    for(let i=0;i<=ySteps;i++){
-      const v = Rh.mn + (Rh.span)*(i/ySteps);
-      const y = mapYH(v);
-      const text = Math.round(v).toString();
-      const tw = ctx.measureText(text).width;
-      ctx.fillText(text, W - padR + 6, y+4);
+      ctx.fillText((key==='h'?Math.round(v):v.toFixed(0)).toString(), 6, y+4);
     }
 
-    // x ticks (time)
-    const stepX=Math.max(1,Math.ceil(series.length/6));
-    for(let i=0;i<series.length;i+=stepX){
-      const x = X(i,series.length), d=series[i].at;
+    const stepX=Math.max(1,Math.ceil(rows.length/6));
+    for(let i=0;i<rows.length;i+=stepX){
+      const x = X(i,rows.length), d=rows[i].at;
       const label=d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
       const tw=ctx.measureText(label).width;
-      ctx.fillText(label, x - tw/2, H-12);
-      ctx.globalAlpha=.18; ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H-padB); ctx.stroke(); ctx.globalAlpha=1;
+      ctx.fillText(label, x - tw/2, H-10);
+      ctx.globalAlpha=.16; ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H-padB); ctx.stroke(); ctx.globalAlpha=1;
     }
 
-    // temp area + line
-    if(state.show.t){
-      ctx.beginPath(); series.forEach((s,i)=>{ const x=X(i,series.length), y=mapYT(s.t); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    // area (เฉพาะ Temp)
+    if(key==='t'){
+      ctx.beginPath(); rows.forEach((s,i)=>{ const x=X(i,rows.length), y=mapY(s[key]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
       ctx.lineTo(W-padR,H-padB); ctx.lineTo(padL,H-padB); ctx.closePath();
       ctx.fillStyle="rgba(96,165,250,.20)"; ctx.fill();
-
-      ctx.lineWidth=2.6; ctx.strokeStyle="rgba(96,165,250,1)";
-      ctx.beginPath(); series.forEach((s,i)=>{ const x=X(i,series.length), y=mapYT(s.t); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
-    }
-    // humidity line
-    if(state.show.h){
-      ctx.lineWidth=2.4; ctx.strokeStyle="rgba(52,211,153,1)";
-      ctx.beginPath(); series.forEach((s,i)=>{ const x=X(i,series.length), y=mapYH(s.h); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
-    }
-    // dew line
-    if(state.show.d){
-      ctx.lineWidth=2.0; ctx.strokeStyle="rgba(250,204,21,1)";
-      ctx.beginPath(); series.forEach((s,i)=>{ const x=X(i,series.length), y=mapYT(s.d); i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.stroke();
     }
 
-    // badges: ตัวเลขล่าสุด (ซ้ายบน)
-    const last = series[series.length-1];
-    badge(ctx, padL+6, 8, `Temp ${Number(last.t).toFixed(1)}°C`, "rgba(96,165,250,.95)", "rgba(96,165,250,.22)");
-    badge(ctx, padL+6, 34, `Hum ${Math.round(last.h)}%RH`, "rgba(52,211,153,.95)", "rgba(52,211,153,.22)");
-    if(isFinite(last.d)) badge(ctx, padL+6, 60, `Dew ${Number(last.d).toFixed(1)}°C`, "rgba(250,204,21,.95)", "rgba(250,204,21,.22)");
+    // line
+    ctx.lineWidth=2.6;
+    ctx.strokeStyle=color;
+    ctx.beginPath();
+    rows.forEach((s,i)=>{ const x=X(i,rows.length), y=mapY(s[key]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
+    ctx.stroke();
 
-    // badge Now (ขวาบน)
+    // latest & Now
+    const last = rows[rows.length-1];
+    const latestText = key==='h' ? `${Math.round(last[key])}%` : `${Number(last[key]).toFixed(1)}°`;
+    const stroke = color.replace('1)', '.95)').replace('0.95','0.95');
+    const bg     = color.replace('1)', '.22)').replace('0.95','0.22');
+    badge(ctx, padL+6, 8, latestText, stroke, bg);
+
     const now = new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
-    const tm = document.createElement("canvas").getContext("2d");
-    tm.font="bold 13px system-ui";
-    const wNow = Math.max(120, tm.measureText(`Now ${now}`).width + 24);
-    badge(ctx, W - wNow - 14, 8, `Now ${now}`, "rgba(255,255,255,.6)", "rgba(255,255,255,.14)");
+    const tmp = document.createElement("canvas").getContext("2d");
+    tmp.font="bold 13px system-ui";
+    const wNow = Math.max(120, tmp.measureText(`Now ${now}`).width + 24);
+    badge(ctx, W - wNow - 8, 8, `Now ${now}`, "rgba(255,255,255,.6)", "rgba(255,255,255,.14)");
 
-    // Δt labels (กลาง segment) — จำกัดไม่เกิน 10 ป้ายเพื่อความชัด
-    const totalSegments = series.length-1;
-    const showEvery = Math.ceil(totalSegments / 10);
-    for(let i=1;i<series.length;i+=showEvery){
-      const prev = series[i-1], cur = series[i];
-      const midX = (X(i-1,series.length)+X(i,series.length))/2;
-      const dt = Math.max(0, Math.round((cur.at - prev.at)/1000));
-      badge(ctx, midX-20, padT+4, `Δt ${dt}s`, "rgba(255,255,255,.45)", "rgba(255,255,255,.12)", {small:true});
-      // เส้นจุดเล็กบอกตำแหน่ง
-      ctx.fillStyle="rgba(255,255,255,.5)";
-      ctx.fillRect(midX-0.5, padT+24, 1, 6);
+    // Δt เฉพาะ temp เพื่อไม่รก
+    if(withDelta){
+      const totalSegments = rows.length-1;
+      const showEvery = Math.ceil(totalSegments / 10);
+      for(let i=1;i<rows.length;i+=showEvery){
+        const prev = rows[i-1], cur = rows[i];
+        const midX = (X(i-1,rows.length)+X(i,rows.length))/2;
+        const dt = Math.max(0, Math.round((cur.at - prev.at)/1000));
+        badge(ctx, midX-20, padT+4, `Δt ${dt}s`, "rgba(255,255,255,.45)", "rgba(255,255,255,.12)", true);
+      }
     }
   }
 
@@ -218,29 +198,44 @@
     return rows;
   }
 
-  // load
+  const state = { rows: [] };
+
   async function loadHistory(limit=50){
     try{
       const j = await fetchJSON(`${URL_HISTORY(limit)}&_=${Date.now()}`);
       const rows = toSeries(pickArray(j));
-      state.timeline = rows;
-      drawTimeline(el.timeline, rows);
+      state.rows = rows;
 
-      // อัปเดตสถิติ
+      // update header last values
+      if(rows.length){
+        const last = rows[rows.length-1];
+        el.lastT && (el.lastT.textContent = `${last.t.toFixed(1)}°C`);
+        el.lastH && (el.lastH.textContent = `${Math.round(last.h)}%`);
+        el.lastD && (el.lastD.textContent = `${last.d.toFixed(1)}°C`);
+      }
+
+      // stats
       if(rows.length>1){
         const dts = rows.slice(1).map((r,i)=> (r.at - rows[i].at)/1000);
         const avg = dts.reduce((a,b)=>a+b,0)/dts.length;
-        const tvals = rows.map(r=>r.t), hvals = rows.map(r=>r.h);
         el.avgDt && (el.avgDt.textContent = `${avg.toFixed(1)}s`);
+        const tvals = rows.map(r=>r.t), hvals = rows.map(r=>r.h);
         el.minT && (el.minT.textContent = Math.min(...tvals).toFixed(1));
         el.maxT && (el.maxT.textContent = Math.max(...tvals).toFixed(1));
         el.minH && (el.minH.textContent = Math.min(...hvals).toFixed(0));
         el.maxH && (el.maxH.textContent = Math.max(...hvals).toFixed(0));
       }
+
+      // draw each chart
+      drawChart(el.chartT, rows, 't', 'rgba(96,165,250,1)', true);
+      drawChart(el.chartH, rows, 'h', 'rgba(52,211,153,1)');
+      drawChart(el.chartD, rows, 'd', 'rgba(250,204,21,1)');
     }catch(e){
       console.warn("history error", e);
-      state.timeline = [];
-      drawTimeline(el.timeline, []);
+      state.rows = [];
+      drawChart(el.chartT, [], 't', 'rgba(96,165,250,1)', true);
+      drawChart(el.chartH, [], 'h', 'rgba(52,211,153,1)');
+      drawChart(el.chartD, [], 'd', 'rgba(250,204,21,1)');
     }
   }
 
@@ -250,6 +245,7 @@
         fetchJSON(`${URL_STATUS}&_=${Date.now()}`),
         getLatest()
       ]);
+
       const isOnline = (typeof status?.online === "boolean")
         ? status.online
         : (typeof status?.is_online === "boolean" ? status.is_online : false);
@@ -267,8 +263,13 @@
         el.card?.classList.add("hidden");
         el.empty && (el.empty.style.display="block");
       }
-      // ปรับเวลาปัจจุบันบนกราฟ
-      if(state.timeline.length) drawTimeline(el.timeline, state.timeline);
+
+      // refresh time badge on charts
+      if(state.rows.length){
+        drawChart(el.chartT, state.rows, 't', 'rgba(96,165,250,1)', true);
+        drawChart(el.chartH, state.rows, 'h', 'rgba(52,211,153,1)');
+        drawChart(el.chartD, state.rows, 'd', 'rgba(250,204,21,1)');
+      }
     }catch(e){
       console.warn("refresh error:", e);
       setStatus(false);
@@ -282,20 +283,10 @@
     btn.addEventListener("click", ()=> loadHistory(Number(btn.dataset.limit||50)));
   });
 
-  // toggle series buttons
-  document.querySelectorAll(".toggle").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      btn.classList.toggle("active");
-      const k = btn.dataset.series; // t/h/d
-      state.show[k] = btn.classList.contains("active");
-      if(state.timeline.length) drawTimeline(el.timeline, state.timeline);
-    });
-  });
-
-  // redraw on resize / orientation
-  const ro = new ResizeObserver(()=>{ if(state.timeline.length) drawTimeline(el.timeline, state.timeline); });
-  if(el.timeline) ro.observe(el.timeline.parentElement || el.timeline);
-  window.addEventListener("orientationchange", ()=> setTimeout(()=>{ if(state.timeline.length) drawTimeline(el.timeline, state.timeline); }, 250));
+  // redraw on resize/orientation
+  const ro = new ResizeObserver(()=>{ if(state.rows.length){ drawChart(el.chartT, state.rows, 't', 'rgba(96,165,250,1)', true); drawChart(el.chartH, state.rows, 'h', 'rgba(52,211,153,1)'); drawChart(el.chartD, state.rows, 'd', 'rgba(250,204,21,1)'); }});
+  [el.chartT, el.chartH, el.chartD].forEach(c=> c && ro.observe(c.parentElement || c));
+  window.addEventListener("orientationchange", ()=> setTimeout(()=>{ if(state.rows.length){ drawChart(el.chartT, state.rows, 't', 'rgba(96,165,250,1)', true); drawChart(el.chartH, state.rows, 'h', 'rgba(52,211,153,1)'); drawChart(el.chartD, state.rows, 'd', 'rgba(250,204,21,1)'); }}, 250));
 
   // boot
   refresh(); loadHistory(50);
