@@ -9,17 +9,19 @@
   <script defer src="/app.js"></script>
 </head>
 <body>
+  <!-- พื้นหลังสดใส -->
+  <div class="bg"></div>
   <!-- ใบไม้ปลิว -->
   <div class="leaves">
-    <i style="--x:6%; --dur:18s; --delay:-2s; --amp:18px;"></i>
-    <i style="--x:18%; --dur:22s; --delay:-9s; --amp:24px;"></i>
-    <i style="--x:28%; --dur:16s; --delay:-4s; --amp:16px;"></i>
+    <i style="--x:6%;  --dur:18s; --delay:-2s;  --amp:18px;"></i>
+    <i style="--x:18%; --dur:22s; --delay:-9s;  --amp:24px;"></i>
+    <i style="--x:28%; --dur:16s; --delay:-4s;  --amp:16px;"></i>
     <i style="--x:40%; --dur:20s; --delay:-12s; --amp:26px;"></i>
-    <i style="--x:50%; --dur:19s; --delay:-6s; --amp:22px;"></i>
-    <i style="--x:62%; --dur:23s; --delay:-3s; --amp:20px;"></i>
-    <i style="--x:72%; --dur:17s; --delay:-8s; --amp:18px;"></i>
+    <i style="--x:50%; --dur:19s; --delay:-6s;  --amp:22px;"></i>
+    <i style="--x:62%; --dur:23s; --delay:-3s;  --amp:20px;"></i>
+    <i style="--x:72%; --dur:17s; --delay:-8s;  --amp:18px;"></i>
     <i style="--x:82%; --dur:24s; --delay:-11s; --amp:28px;"></i>
-    <i style="--x:92%; --dur:21s; --delay:-1s; --amp:24px;"></i>
+    <i style="--x:92%; --dur:21s; --delay:-1s;  --amp:24px;"></i>
   </div>
 
   <div class="wrap">
@@ -38,8 +40,9 @@
       </div>
     </header>
 
+    <!-- เลย์เอาต์ 12 คอลัมน์ เพื่อบาลานซ์ซ้าย/ขวา -->
     <main class="grid">
-      <!-- การ์ดหลัก -->
+      <!-- 1) การ์ดหลัก (กิน 8 คอลัมน์) -->
       <section class="card hero" id="card">
         <div class="hero-left">
           <div class="ring" id="tempRing">
@@ -73,7 +76,7 @@
         </div>
       </section>
 
-      <!-- การ์ดอนิเมะ -->
+      <!-- 2) การ์ดอนิเมะ (กิน 4 คอลัมน์) -->
       <section class="card anime" aria-label="anime card">
         <div class="anime-wrap">
           <svg class="mascot" viewBox="0 0 200 140" aria-hidden="true">
@@ -102,7 +105,7 @@
         </div>
       </section>
 
-      <!-- Trends: แยก 3 กราฟ -->
+      <!-- 3) เทรนด์ (กิน 8 คอลัมน์) -->
       <section class="card trends">
         <div class="card-head">
           <h2>Live Trends</h2>
@@ -142,11 +145,9 @@
         <div class="dim tiny">แต่ละกราฟมีแกนตัวเลขของตัวเอง + เส้นตาราง • “Now” อยู่ด้านบน ไม่บังเส้นกราฟ</div>
       </section>
 
-      <!-- การ์ด Comfort (แทน Sensor Insights) -->
+      <!-- 4) Comfort (กิน 4 คอลัมน์) -->
       <section class="card comfort">
-        <div class="card-head">
-          <h2>Comfort</h2>
-        </div>
+        <div class="card-head"><h2>Comfort</h2></div>
 
         <div class="comfort-grid">
           <div class="meter">
