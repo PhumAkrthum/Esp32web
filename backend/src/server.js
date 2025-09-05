@@ -1,10 +1,9 @@
+// backend/server.js
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
 import morgan from 'morgan';
 import Reading from './models/Reading.js';
-
-
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -24,6 +23,7 @@ mongoose.connect(MONGODB_URI).then(() => {
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
+// รับค่าจาก ESP32
 app.post('/api/readings', async (req, res) => {
   try {
     const { device_id, temperature, humidity } = req.body || {};
@@ -32,9 +32,46 @@ app.post('/api/readings', async (req, res) => {
     }
     const saved = await Reading.create({ device_id, temperature, humidity });
     return res.json({ ok: true, id: saved._id, ts: saved.created_at });
-  } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
+// คืนรายการประวัติ (ใช้ทำกราฟ)
+app.get('/api/readings', async (req, res) => {
+  try {
+    const {
+      device_id,
+      limit = 50,
+      sort = '-created_at', // ล่าสุดก่อน
+      from,
+      to
+    } = req.query;
+
+    const query = {};
+    if (device_id) query.device_id = device_id;
+
+    if (from || to) {
+      query.created_at = {};
+      if (from) query.created_at.$gte = new Date(from);
+      if (to)   query.created_at.$lte = new Date(to);
+    }
+
+    const lim = Math.max(1, Math.min(parseInt(limit, 10) || 50, 1000));
+
+    const items = await Reading.find(query)
+      .sort(sort)   // "-created_at" หรือ "created_at"
+      .limit(lim)
+      .lean();
+
+    return res.json({ ok: true, data: items });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ค่าล่าสุดของอุปกรณ์
 app.get('/api/readings/latest', async (req, res) => {
   try {
     const deviceId = req.query.device_id;
@@ -42,19 +79,26 @@ app.get('/api/readings/latest', async (req, res) => {
     const latest = await Reading.findOne({ device_id: deviceId }).sort({ created_at: -1 }).lean();
     if (!latest) return res.json({ ok: true, data: null });
     return res.json({ ok: true, data: latest });
-  } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
+// สถานะออนไลน์/ออฟไลน์
 app.get('/api/status/:device_id', async (req, res) => {
   try {
     const { device_id } = req.params;
     const thresholdSec = Number(req.query.threshold_sec || 30);
     const latest = await Reading.findOne({ device_id }).sort({ created_at: -1 }).lean();
-    if (!latest) return res.json({ ok: true, device_id, online: false, last_seen: null, threshold_sec: thresholdSec });
+    if (!latest) {
+      return res.json({ ok: true, device_id, online: false, last_seen: null, threshold_sec: thresholdSec });
+    }
     const ageSec = Math.round((Date.now() - new Date(latest.created_at).getTime()) / 1000);
     const online = ageSec <= thresholdSec;
     return res.json({ ok: true, device_id, online, age_sec: ageSec, last_seen: latest.created_at, threshold_sec: thresholdSec });
-  } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 app.get('/', (req, res) => res.json({ name: 'esp32-dht-api', ok: true }));

@@ -62,7 +62,7 @@
         </div>
       </section>
 
-      <!-- กราฟสปาร์คไลน์ -->
+      <!-- กราฟสปาร์คไลน์ (มุมขวา) -->
       <section class="card">
         <div class="card-head">
           <h2>Recent Trend</h2>
@@ -71,18 +71,29 @@
             <span class="lg hum">Humidity</span>
           </div>
         </div>
-        <canvas id="chart" width="900" height="240" aria-label="Temperature & Humidity Sparkline"></canvas>
-        <div class="dim tiny">แสดงผลย้อนหลังจาก API /api/readings?device_id=...&limit=50</div>
+        <!-- ปรับเป็น responsive canvas -->
+        <canvas id="chart" class="responsive" data-ratio="3.6" aria-label="Temperature & Humidity Sparkline"></canvas>
+        <div class="dim tiny">ดึงจาก /api/readings?device_id=...&limit=50</div>
       </section>
 
-      <!-- เคล็ดลับ / สถานะ -->
-      <section class="card tips">
-        <h2>Tips</h2>
-        <ul>
-          <li>ถ้าค่าไม่นิ่ง: อ่านซ้ำ 3 ครั้งแล้วเฉลี่ยก่อนส่ง</li>
-          <li>เช็ก pull-up 10k ระหว่าง VCC–DATA ของ DHT11</li>
-          <li>ปรับช่วงอัปเดตให้พอดี เพื่อประหยัดพลังงาน</li>
-        </ul>
+      <!-- แทน Tips ด้วยกราฟไทม์ไลน์ -->
+      <section class="card timeline">
+        <div class="card-head">
+          <h2>Environment Change</h2>
+          <div class="tabs">
+            <button class="btn ghost small range" data-limit="50">Last 50</button>
+            <button class="btn ghost small range" data-limit="200">Last 200</button>
+            <button class="btn ghost small range" data-limit="500">Last 500</button>
+          </div>
+        </div>
+        <!-- ปรับเป็น responsive canvas -->
+        <canvas id="timeline" class="responsive" data-ratio="3.2" aria-label="Temp / Humidity / Dew timeline"></canvas>
+        <div class="legend">
+          <span class="lg temp">Temp</span>
+          <span class="lg hum">Humidity</span>
+          <span class="lg dew">Dew</span>
+        </div>
+        <div class="dim tiny">ใช้ /api/readings (รองรับ limit / sort / ช่วงเวลา)</div>
       </section>
     </main>
 
