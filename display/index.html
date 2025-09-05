@@ -9,7 +9,18 @@
   <script defer src="/app.js"></script>
 </head>
 <body>
-  <div class="bg"></div>
+  <!-- ใบไม้ปลิว -->
+  <div class="leaves">
+    <i style="--x:6%; --dur:18s; --delay:-2s; --amp:18px;"></i>
+    <i style="--x:18%; --dur:22s; --delay:-9s; --amp:24px;"></i>
+    <i style="--x:28%; --dur:16s; --delay:-4s; --amp:16px;"></i>
+    <i style="--x:40%; --dur:20s; --delay:-12s; --amp:26px;"></i>
+    <i style="--x:50%; --dur:19s; --delay:-6s; --amp:22px;"></i>
+    <i style="--x:62%; --dur:23s; --delay:-3s; --amp:20px;"></i>
+    <i style="--x:72%; --dur:17s; --delay:-8s; --amp:18px;"></i>
+    <i style="--x:82%; --dur:24s; --delay:-11s; --amp:28px;"></i>
+    <i style="--x:92%; --dur:21s; --delay:-1s; --amp:24px;"></i>
+  </div>
 
   <div class="wrap">
     <header class="topbar">
@@ -104,31 +115,59 @@
 
         <div class="charts">
           <div class="chartbox">
-            <div class="chart-head"><span class="dot t"></span> Temperature (°C) <span id="lastT" class="lastval">—</span></div>
+            <div class="chart-head">
+              <span><span class="dot t"></span> Temperature (°C)</span>
+              <span class="head-right"><span id="lastT" class="lastval">—</span> • <span id="nowT" class="nowclock">Now --:--:--</span></span>
+            </div>
             <canvas id="chartT" class="responsive" data-ratio="5"></canvas>
           </div>
+
           <div class="chartbox">
-            <div class="chart-head"><span class="dot h"></span> Humidity (%RH) <span id="lastH" class="lastval">—</span></div>
+            <div class="chart-head">
+              <span><span class="dot h"></span> Humidity (%RH)</span>
+              <span class="head-right"><span id="lastH" class="lastval">—</span> • <span id="nowH" class="nowclock">Now --:--:--</span></span>
+            </div>
             <canvas id="chartH" class="responsive" data-ratio="5"></canvas>
           </div>
+
           <div class="chartbox">
-            <div class="chart-head"><span class="dot d"></span> Dew Point (°C) <span id="lastD" class="lastval">—</span></div>
+            <div class="chart-head">
+              <span><span class="dot d"></span> Dew Point (°C)</span>
+              <span class="head-right"><span id="lastD" class="lastval">—</span> • <span id="nowD" class="nowclock">Now --:--:--</span></span>
+            </div>
             <canvas id="chartD" class="responsive" data-ratio="5"></canvas>
           </div>
         </div>
 
-        <div class="dim tiny">แต่ละกราฟมีแกนตัวเลขของตัวเอง + เส้นตาราง + ป้าย Now (กราฟอุณหภูมิมี Δt ระหว่างจุด)</div>
+        <div class="dim tiny">แต่ละกราฟมีแกนตัวเลขของตัวเอง + เส้นตาราง • “Now” อยู่ด้านบน ไม่บังเส้นกราฟ</div>
       </section>
 
-      <!-- การ์ดสถิติ (ไม่ใช่กราฟ) -->
-      <section class="card stats">
+      <!-- การ์ด Comfort (แทน Sensor Insights) -->
+      <section class="card comfort">
         <div class="card-head">
-          <h2>Sensor Insights</h2>
+          <h2>Comfort</h2>
         </div>
-        <div class="chips">
-          <div class="chip">Avg Δt: <b id="avgDt">—</b></div>
-          <div class="chip">Temp Min / Max: <b><span id="minT">—</span> / <span id="maxT">—</span> °C</b></div>
-          <div class="chip">Hum Min / Max: <b><span id="minH">—</span>% / <span id="maxH">—</span>%</b></div>
+
+        <div class="comfort-grid">
+          <div class="meter">
+            <div class="meter-head">
+              <b>Heat Index</b>
+              <span id="hiText" class="badge">—</span>
+            </div>
+            <div class="meter-bar">
+              <div class="meter-grad"></div>
+              <div id="hiPointer" class="pointer" style="left:0%"></div>
+            </div>
+            <div class="meter-scale">
+              <span>Cool</span><span>Warm</span><span>Hot</span><span>Very Hot</span>
+            </div>
+          </div>
+
+          <div class="facts">
+            <div class="fact"><span class="k">Feels like</span><span id="feelsLike">—</span></div>
+            <div class="fact"><span class="k">Dew point</span><span id="factDew">—</span></div>
+            <div class="fact"><span class="k">Comfort zone</span><span id="comfortZone">—</span></div>
+          </div>
         </div>
       </section>
     </main>

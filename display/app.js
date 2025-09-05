@@ -1,4 +1,4 @@
-// แยกกราฟ 3 ใบ + ตัวเลขแกน X/Y + Now badge (+ Δt บนกราฟ Temp)
+// แยกกราฟ 3 ใบ • ย้าย "Now" ไปที่หัวกราฟ • ตัด badge/สามเหลี่ยมในกราฟ
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
   const API_BASE   = CFG.API_BASE || "";
@@ -17,24 +17,29 @@
     tempRing: document.getElementById("tempRing"),
     humBar: document.getElementById("humBar"),
     card: document.getElementById("card"),
-    // charts
+
+    // charts + header labels
     chartT: document.getElementById("chartT"),
     chartH: document.getElementById("chartH"),
     chartD: document.getElementById("chartD"),
-    // last text on headers
     lastT: document.getElementById("lastT"),
     lastH: document.getElementById("lastH"),
     lastD: document.getElementById("lastD"),
-    // extras
+    nowT:  document.getElementById("nowT"),
+    nowH:  document.getElementById("nowH"),
+    nowD:  document.getElementById("nowD"),
+
+    // comfort
+    hiText:    document.getElementById("hiText"),
+    hiPointer: document.getElementById("hiPointer"),
+    feelsLike: document.getElementById("feelsLike"),
+    factDew:   document.getElementById("factDew"),
+    comfortZone: document.getElementById("comfortZone"),
+
+    // misc
     themeToggle: document.getElementById("themeToggle"),
     yr: document.getElementById("yr"),
     empty: document.getElementById("emptyHint"),
-    // stats
-    avgDt: document.getElementById("avgDt"),
-    minT: document.getElementById("minT"),
-    maxT: document.getElementById("maxT"),
-    minH: document.getElementById("minH"),
-    maxH: document.getElementById("maxH"),
   };
 
   el.yr   && (el.yr.textContent   = new Date().getFullYear());
@@ -52,7 +57,41 @@
   function setStatus(on){ el.status?.classList.toggle("online", !!on); el.status?.classList.toggle("offline", !on); const lb=el.status?.querySelector(".label"); if(lb) lb.textContent = on ? "Connected" : "Disconnected"; }
   function fmtTime(iso){ if(!iso) return "—"; const d=new Date(iso), diff=(Date.now()-d)/1000; if(diff<60) return "just now"; if(diff<3600) return `${Math.floor(diff/60)} min ago`; return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}`; }
   function dewPointC(tC,rh){ if(!isFinite(tC)||!isFinite(rh)||rh<=0) return NaN; const a=17.62,b=243.12,g=(a*tC)/(b+tC)+Math.log(rh/100); return (b*g)/(a-g); }
-  function updateGauges(t,h){ const p=Math.max(0,Math.min(100,(Number(t)/50)*100)); el.tempRing?.style.setProperty("--p", p.toFixed(2)); el.temp&&(el.temp.textContent=isFinite(t)?Number(t).toFixed(1):"--.-"); el.hum&&(el.hum.textContent=isFinite(h)?Math.round(Number(h)):"--"); el.humBar&&(el.humBar.style.width=`${Math.max(0,Math.min(100,Number(h)||0)).toFixed(0)}%`); const dp=dewPointC(Number(t),Number(h)); el.dew&&(el.dew.textContent=isFinite(dp)?dp.toFixed(1):"--.-"); }
+  function heatIndexC(tC, rh){
+    const Tf = 1.8*tC + 32;
+    const HI = -42.379 + 2.04901523*Tf + 10.14333127*rh
+      - 0.22475541*Tf*rh - 6.83783e-3*Tf*Tf - 5.481717e-2*rh*rh
+      + 1.22874e-3*Tf*Tf*rh + 8.5282e-4*Tf*rh*rh - 1.99e-6*Tf*Tf*rh*rh;
+    return (HI-32)/1.8;
+  }
+  function comfortText(dp){
+    if(!isFinite(dp)) return "—";
+    if(dp < 10)  return "Dry / Cool";
+    if(dp < 16)  return "Comfortable";
+    if(dp < 18)  return "Slightly Humid";
+    if(dp < 21)  return "Humid";
+    if(dp < 24)  return "Very Humid";
+    if(dp < 27)  return "Oppressive";
+    return "Extreme Humidity";
+  }
+  function updateGauges(t,h){
+    const p=Math.max(0,Math.min(100,(Number(t)/50)*100));
+    el.tempRing?.style.setProperty("--p", p.toFixed(2));
+    el.temp&&(el.temp.textContent=isFinite(t)?Number(t).toFixed(1):"--.-");
+    el.hum&&(el.hum.textContent=isFinite(h)?Math.round(Number(h)):"--");
+    el.humBar&&(el.humBar.style.width=`${Math.max(0,Math.min(100,Number(h)||0)).toFixed(0)}%`);
+    const dp=dewPointC(Number(t),Number(h));
+    el.dew&&(el.dew.textContent=isFinite(dp)?dp.toFixed(1):"--.-");
+    // comfort card
+    const hi = heatIndexC(Number(t), Number(h));
+    if (el.feelsLike) el.feelsLike.textContent = isFinite(hi) ? `${hi.toFixed(1)} °C` : "—";
+    if (el.factDew)   el.factDew.textContent   = isFinite(dp) ? `${dp.toFixed(1)} °C` : "—";
+    if (el.comfortZone) el.comfortZone.textContent = comfortText(dp);
+    if (el.hiText) el.hiText.textContent = isFinite(hi) ? (hi < 26 ? "Comfort" : hi < 32 ? "Warm" : hi < 40 ? "Hot" : "Very Hot") : "—";
+    // pointer 0–45°C scale
+    const pos = Math.max(0, Math.min(100, (isFinite(hi) ? hi : 0) / 45 * 100));
+    if (el.hiPointer) el.hiPointer.style.left = `${pos}%`;
+  }
 
   // parse
   function pickArray(j){ if(Array.isArray(j)) return j; return j?.data||j?.items||j?.rows||j?.docs||j?.result||j?.history||[]; }
@@ -95,26 +134,8 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);
     return {w:cw,h:ch,ctx};
   }
-  function badge(ctx, x, y, text, stroke, fillBg, small=false){
-    ctx.save();
-    ctx.font = (small?'600 11px':'bold 13px') + ' system-ui, -apple-system, Segoe UI, Roboto';
-    const padX=small?8:10, padY=small?4:6, r=small?7:8, h=small?20:22;
-    const w = ctx.measureText(text).width + padX*2;
-    ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y, x+w,y+h, r);
-    ctx.arcTo(x+w,y+h, x,y+h, r);
-    ctx.arcTo(x,y+h, x,y, r);
-    ctx.arcTo(x,y, x+w,y, r);
-    ctx.closePath();
-    ctx.fillStyle = fillBg; ctx.fill();
-    ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke();
-    ctx.fillStyle = "#fff"; ctx.fillText(text, x+padX, y+(small?14:15));
-    ctx.restore();
-  }
 
-  // draw single chart
-  function drawChart(canvas, rows, key, color, withDelta=false){
+  function drawChart(canvas, rows, key, color){
     const {w:W,h:H,ctx} = fitCanvas(canvas);
     if(!ctx){ return; }
     ctx.clearRect(0,0,W,H);
@@ -152,11 +173,11 @@
       ctx.globalAlpha=.16; ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, H-padB); ctx.stroke(); ctx.globalAlpha=1;
     }
 
-    // area (เฉพาะ Temp)
+    // area for temp (เบา ๆ)
     if(key==='t'){
       ctx.beginPath(); rows.forEach((s,i)=>{ const x=X(i,rows.length), y=mapY(s[key]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
       ctx.lineTo(W-padR,H-padB); ctx.lineTo(padL,H-padB); ctx.closePath();
-      ctx.fillStyle="rgba(96,165,250,.20)"; ctx.fill();
+      ctx.fillStyle="rgba(96,165,250,.18)"; ctx.fill();
     }
 
     // line
@@ -165,36 +186,11 @@
     ctx.beginPath();
     rows.forEach((s,i)=>{ const x=X(i,rows.length), y=mapY(s[key]); i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
     ctx.stroke();
-
-    // latest & Now
-    const last = rows[rows.length-1];
-    const latestText = key==='h' ? `${Math.round(last[key])}%` : `${Number(last[key]).toFixed(1)}°`;
-    const stroke = color.replace('1)', '.95)').replace('0.95','0.95');
-    const bg     = color.replace('1)', '.22)').replace('0.95','0.22');
-    badge(ctx, padL+6, 8, latestText, stroke, bg);
-
-    const now = new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
-    const tmp = document.createElement("canvas").getContext("2d");
-    tmp.font="bold 13px system-ui";
-    const wNow = Math.max(120, tmp.measureText(`Now ${now}`).width + 24);
-    badge(ctx, W - wNow - 8, 8, `Now ${now}`, "rgba(255,255,255,.6)", "rgba(255,255,255,.14)");
-
-    // Δt เฉพาะ temp เพื่อไม่รก
-    if(withDelta){
-      const totalSegments = rows.length-1;
-      const showEvery = Math.ceil(totalSegments / 10);
-      for(let i=1;i<rows.length;i+=showEvery){
-        const prev = rows[i-1], cur = rows[i];
-        const midX = (X(i-1,rows.length)+X(i,rows.length))/2;
-        const dt = Math.max(0, Math.round((cur.at - prev.at)/1000));
-        badge(ctx, midX-20, padT+4, `Δt ${dt}s`, "rgba(255,255,255,.45)", "rgba(255,255,255,.12)", true);
-      }
-    }
   }
 
   function toSeries(arr){
     const rows=arr.map(parseReading).filter(s=>isFinite(s.t)&&isFinite(s.h)).sort((a,b)=>a.at-b.at);
-    rows.forEach(r=>r.d=dewPointC(r.t,r.h));
+    rows.forEach(r=>r.d=dewPointC(r.t, r.h));
     return rows;
   }
 
@@ -206,7 +202,6 @@
       const rows = toSeries(pickArray(j));
       state.rows = rows;
 
-      // update header last values
       if(rows.length){
         const last = rows[rows.length-1];
         el.lastT && (el.lastT.textContent = `${last.t.toFixed(1)}°C`);
@@ -214,26 +209,13 @@
         el.lastD && (el.lastD.textContent = `${last.d.toFixed(1)}°C`);
       }
 
-      // stats
-      if(rows.length>1){
-        const dts = rows.slice(1).map((r,i)=> (r.at - rows[i].at)/1000);
-        const avg = dts.reduce((a,b)=>a+b,0)/dts.length;
-        el.avgDt && (el.avgDt.textContent = `${avg.toFixed(1)}s`);
-        const tvals = rows.map(r=>r.t), hvals = rows.map(r=>r.h);
-        el.minT && (el.minT.textContent = Math.min(...tvals).toFixed(1));
-        el.maxT && (el.maxT.textContent = Math.max(...tvals).toFixed(1));
-        el.minH && (el.minH.textContent = Math.min(...hvals).toFixed(0));
-        el.maxH && (el.maxH.textContent = Math.max(...hvals).toFixed(0));
-      }
-
-      // draw each chart
-      drawChart(el.chartT, rows, 't', 'rgba(96,165,250,1)', true);
+      drawChart(el.chartT, rows, 't', 'rgba(96,165,250,1)');
       drawChart(el.chartH, rows, 'h', 'rgba(52,211,153,1)');
       drawChart(el.chartD, rows, 'd', 'rgba(250,204,21,1)');
     }catch(e){
       console.warn("history error", e);
       state.rows = [];
-      drawChart(el.chartT, [], 't', 'rgba(96,165,250,1)', true);
+      drawChart(el.chartT, [], 't', 'rgba(96,165,250,1)');
       drawChart(el.chartH, [], 'h', 'rgba(52,211,153,1)');
       drawChart(el.chartD, [], 'd', 'rgba(250,204,21,1)');
     }
@@ -264,9 +246,9 @@
         el.empty && (el.empty.style.display="block");
       }
 
-      // refresh time badge on charts
+      // วาดใหม่ (ปรับสเกลตามขนาด)
       if(state.rows.length){
-        drawChart(el.chartT, state.rows, 't', 'rgba(96,165,250,1)', true);
+        drawChart(el.chartT, state.rows, 't', 'rgba(96,165,250,1)');
         drawChart(el.chartH, state.rows, 'h', 'rgba(52,211,153,1)');
         drawChart(el.chartD, state.rows, 'd', 'rgba(250,204,21,1)');
       }
@@ -278,15 +260,25 @@
     }
   }
 
+  // อัปเดตนาฬิกา "Now" ที่หัวกราฟทุกวินาที
+  function tickClock(){
+    const now = new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"});
+    if (el.nowT) el.nowT.textContent = `Now ${now}`;
+    if (el.nowH) el.nowH.textContent = `Now ${now}`;
+    if (el.nowD) el.nowD.textContent = `Now ${now}`;
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
   // range buttons
   document.querySelectorAll(".range").forEach(btn=>{
     btn.addEventListener("click", ()=> loadHistory(Number(btn.dataset.limit||50)));
   });
 
   // redraw on resize/orientation
-  const ro = new ResizeObserver(()=>{ if(state.rows.length){ drawChart(el.chartT, state.rows, 't', 'rgba(96,165,250,1)', true); drawChart(el.chartH, state.rows, 'h', 'rgba(52,211,153,1)'); drawChart(el.chartD, state.rows, 'd', 'rgba(250,204,21,1)'); }});
+  const ro = new ResizeObserver(()=>{ if(state.rows.length){ drawChart(el.chartT, state.rows, 't', 'rgba(96,165,250,1)'); drawChart(el.chartH, state.rows, 'h', 'rgba(52,211,153,1)'); drawChart(el.chartD, state.rows, 'd', 'rgba(250,204,21,1)'); }});
   [el.chartT, el.chartH, el.chartD].forEach(c=> c && ro.observe(c.parentElement || c));
-  window.addEventListener("orientationchange", ()=> setTimeout(()=>{ if(state.rows.length){ drawChart(el.chartT, state.rows, 't', 'rgba(96,165,250,1)', true); drawChart(el.chartH, state.rows, 'h', 'rgba(52,211,153,1)'); drawChart(el.chartD, state.rows, 'd', 'rgba(250,204,21,1)'); }}, 250));
+  window.addEventListener("orientationchange", ()=> setTimeout(()=>{ if(state.rows.length){ drawChart(el.chartT, state.rows, 't', 'rgba(96,165,250,1)'); drawChart(el.chartH, state.rows, 'h', 'rgba(52,211,153,1)'); drawChart(el.chartD, state.rows, 'd', 'rgba(250,204,21,1)'); }}, 250));
 
   // boot
   refresh(); loadHistory(50);
