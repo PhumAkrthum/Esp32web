@@ -9,10 +9,10 @@
   <script defer src="/app.js"></script>
 </head>
 <body>
-  <!-- พื้นหลังทะเลสดใส -->
-  <div class="sea"></div>
-  <!-- ฟองอากาศลอยขึ้น -->
-  <div class="bubbles">
+  <!-- พื้นหลังเปลวไฟ -->
+  <div class="flame"></div>
+  <!-- สะเก็ดไฟ -->
+  <div class="embers">
     <i style="--x:6%;  --delay:-2s;  --dur:14s; --size:10px;"></i>
     <i style="--x:12%; --delay:-6s;  --dur:16s; --size:12px;"></i>
     <i style="--x:20%; --delay:-10s; --dur:12s; --size:8px;"></i>
@@ -41,7 +41,6 @@
       </div>
     </header>
 
-    <!-- เลย์เอาต์ใหม่: แถวที่ 1 = Hero(ซ้าย) + Anime(ขวา), แถวที่ 2 = Live Trends (เต็มกว้าง), แถวที่ 3 = Comfort (เต็มกว้าง) -->
     <main class="grid">
       <!-- HERO -->
       <section class="card hero" id="card">
@@ -74,23 +73,23 @@
         </div>
       </section>
 
-      <!-- การ์ดอนิเมะ (การ์ตูน) -->
+      <!-- การ์ดอนิเมะ (ขยายเล็กน้อย) -->
       <section class="card anime" aria-label="anime card">
         <div class="anime-wrap">
           <svg class="mascot" viewBox="0 0 200 140" aria-hidden="true">
             <defs>
               <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
-                <stop offset="0" stop-color="#7dd3fc"/>
-                <stop offset="1" stop-color="#34d399"/>
+                <stop offset="0" stop-color="#fda4af"/>
+                <stop offset="1" stop-color="#facc15"/>
               </linearGradient>
             </defs>
             <rect x="30" y="36" rx="14" ry="14" width="140" height="88" fill="url(#g1)" opacity="0.35"/>
-            <rect x="40" y="30" rx="12" ry="12" width="120" height="80" fill="#0b1020" stroke="#7dd3fc" stroke-width="2"/>
-            <circle cx="80" cy="70" r="8" fill="#60a5fa"/>
-            <circle cx="120" cy="70" r="8" fill="#60a5fa"/>
-            <rect x="75" y="92" width="50" height="6" rx="3" fill="#34d399"/>
-            <circle cx="68" cy="84" r="3" fill="#fca5a5"/>
-            <circle cx="132" cy="84" r="3" fill="#fca5a5"/>
+            <rect x="40" y="30" rx="12" ry="12" width="120" height="80" fill="#0b1020" stroke="#fda4af" stroke-width="2"/>
+            <circle cx="80" cy="70" r="8" fill="#fda4af"/>
+            <circle cx="120" cy="70" r="8" fill="#fda4af"/>
+            <rect x="75" y="92" width="50" height="6" rx="3" fill="#facc15"/>
+            <circle cx="68" cy="84" r="3" fill="#fb7185"/>
+            <circle cx="132" cy="84" r="3" fill="#fb7185"/>
             <path d="M100 18 l10 -10 M100 18 l-10 -10" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"/>
             <circle cx="100" cy="20" r="3" fill="#a78bfa"/>
           </svg>
@@ -102,7 +101,7 @@
         </div>
       </section>
 
-      <!-- LIVE TRENDS (เต็มกว้าง) -->
+      <!-- LIVE TRENDS -->
       <section class="card trends">
         <div class="card-head">
           <h2>Live Trends</h2>
@@ -119,7 +118,7 @@
               <span><span class="dot t"></span> Temperature (°C)</span>
               <span class="head-right"><span id="lastT" class="lastval">—</span> • <span id="nowT" class="nowclock">Now --:--:--</span></span>
             </div>
-            <canvas id="chartT" class="responsive" data-ratio="5"></canvas>
+            <canvas id="chartT" class="responsive"></canvas>
           </div>
 
           <div class="chartbox">
@@ -127,7 +126,7 @@
               <span><span class="dot h"></span> Humidity (%RH)</span>
               <span class="head-right"><span id="lastH" class="lastval">—</span> • <span id="nowH" class="nowclock">Now --:--:--</span></span>
             </div>
-            <canvas id="chartH" class="responsive" data-ratio="5"></canvas>
+            <canvas id="chartH" class="responsive"></canvas>
           </div>
 
           <div class="chartbox">
@@ -135,14 +134,14 @@
               <span><span class="dot d"></span> Dew Point (°C)</span>
               <span class="head-right"><span id="lastD" class="lastval">—</span> • <span id="nowD" class="nowclock">Now --:--:--</span></span>
             </div>
-            <canvas id="chartD" class="responsive" data-ratio="5"></canvas>
+            <canvas id="chartD" class="responsive"></canvas>
           </div>
         </div>
 
-        <div class="dim tiny">แต่ละกราฟมีแกนตัวเลข + เส้นตารางชัดเจน • ป้าย “Now” อยู่หัวการ์ด ไม่บังเส้นกราฟ</div>
+        <div class="dim tiny">กราฟสูงเท่ากันทุกใบ + เส้นตาราง/ตัวเลขชัด • “Now” ย้ายไว้หัวการ์ดไม่บังเส้นกราฟ</div>
       </section>
 
-      <!-- COMFORT (เต็มกว้าง) -->
+      <!-- COMFORT (คงเดิม) -->
       <section class="card comfort">
         <div class="card-head"><h2>Comfort</h2></div>
         <div class="comfort-grid">
