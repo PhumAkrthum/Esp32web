@@ -9,7 +9,7 @@
   <script defer src="/app.js"></script>
 </head>
 <body>
-  <!-- พื้นหลังสดใส -->
+  <!-- พื้นหลังสดใส + ออโรร่า -->
   <div class="bg"></div>
   <!-- ใบไม้ปลิว -->
   <div class="leaves">
@@ -40,9 +40,9 @@
       </div>
     </header>
 
-    <!-- เลย์เอาต์ 12 คอลัมน์ เพื่อบาลานซ์ซ้าย/ขวา -->
+    <!-- เลย์เอาต์ 12 คอลัมน์ + packing -->
     <main class="grid">
-      <!-- 1) การ์ดหลัก (กิน 8 คอลัมน์) -->
+      <!-- HERO (8 คอลัมน์) -->
       <section class="card hero" id="card">
         <div class="hero-left">
           <div class="ring" id="tempRing">
@@ -76,7 +76,7 @@
         </div>
       </section>
 
-      <!-- 2) การ์ดอนิเมะ (กิน 4 คอลัมน์) -->
+      <!-- การ์ดอนิเมะ (4 คอลัมน์) -->
       <section class="card anime" aria-label="anime card">
         <div class="anime-wrap">
           <svg class="mascot" viewBox="0 0 200 140" aria-hidden="true">
@@ -105,7 +105,7 @@
         </div>
       </section>
 
-      <!-- 3) เทรนด์ (กิน 8 คอลัมน์) -->
+      <!-- Live Trends (8 คอลัมน์) -->
       <section class="card trends">
         <div class="card-head">
           <h2>Live Trends</h2>
@@ -142,10 +142,10 @@
           </div>
         </div>
 
-        <div class="dim tiny">แต่ละกราฟมีแกนตัวเลขของตัวเอง + เส้นตาราง • “Now” อยู่ด้านบน ไม่บังเส้นกราฟ</div>
+        <div class="dim tiny">แต่ละกราฟมีแกนตัวเลขชัดเจน + เส้นตาราง • ป้าย “Now” แยกอยู่ด้านบน ไม่บังเส้นกราฟ</div>
       </section>
 
-      <!-- 4) Comfort (กิน 4 คอลัมน์) -->
+      <!-- Comfort (4 คอลัมน์) -->
       <section class="card comfort">
         <div class="card-head"><h2>Comfort</h2></div>
 
@@ -170,6 +170,18 @@
             <div class="fact"><span class="k">Comfort zone</span><span id="comfortZone">—</span></div>
           </div>
         </div>
+      </section>
+
+      <!-- การ์ด System (4 คอลัมน์) – ไม่ใช่กราฟ เอาไว้ถ่วงพื้นที่ให้บาลานซ์ -->
+      <section class="card system">
+        <div class="card-head"><h2>System</h2></div>
+        <ul class="syslist">
+          <li><span>Device ID</span><b class="badge soft">ตาม config.js</b></li>
+          <li><span>Auto refresh</span><b class="badge soft"><span id="poll">—</span></b></li>
+          <li><span>Status</span><b class="badge soft" id="sysStatus">ดูที่มุมขวาบน</b></li>
+          <li><span>About</span><b class="badge soft">ESP32 • DHT11 • HTTPS</b></li>
+        </ul>
+        <p class="dim tiny">การ์ดนี้ตั้งใจทำเป็น “non-graph” เพื่อถ่วงความสูงคอลัมน์ขวาให้พอดีกับ Live Trends</p>
       </section>
     </main>
 
