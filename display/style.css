@@ -219,3 +219,5 @@ canvas.responsive{
 .light body{ color:#0f172a }
 .light .card{ background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.86)); border-color:rgba(15,23,42,.10) }
 .light .bar{ background:#e5e7eb }
+/* hide bottom card(s) */
+#comfortCard, #summaryCard { display: none !important; }
