@@ -3,36 +3,97 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ESP32 Temperature Dashboard</title>
+  <title>ESP32 DHT11 • Live Dashboard</title>
   <link rel="stylesheet" href="/style.css" />
   <script defer src="/config.js"></script>
   <script defer src="/app.js"></script>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>ESP32 DHT11 Monitor</h1>
-      <div id="status" class="status offline"><span class="dot"></span><span class="label">Disconnected</span></div>
-    </header>
+  <div class="bg"></div>
 
-    <main>
-      <div id="card" class="card hidden">
-        <div class="reading">
-          <div class="value" id="temp">--.-</div>
-          <div class="unit">°C</div>
-        </div>
-        <div class="reading small">
-          <div class="value" id="hum">--</div>
-          <div class="unit">%RH</div>
-        </div>
-        <div class="meta">
-          <div>Device: <span id="dev"></span></div>
-          <div>Last update: <span id="last"></span></div>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand">
+        <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 2l9 4.5v11L12 22 3 17.5v-11L12 2zM6 9.2l6 3 6-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <h1>ESP32 DHT11 Monitor</h1>
+      </div>
+      <div class="actions">
+        <button id="themeToggle" title="Toggle theme" class="btn ghost">🌓</button>
+        <div id="status" class="status offline">
+          <span class="dot"></span><span class="label">Disconnected</span>
         </div>
       </div>
+    </header>
 
-      <p id="hint">Connect your ESP32 and flash the firmware. Data will appear here when online.</p>
+    <main class="grid">
+      <!-- หลัก: อุณหภูมิ -->
+      <section class="card hero" id="card">
+        <div class="hero-left">
+          <div class="ring" id="tempRing">
+            <div class="ring-inner">
+              <div class="value" id="temp">--.-</div>
+              <div class="unit">°C</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-right">
+          <div class="kpis">
+            <div class="kpi">
+              <div class="kpi-title">Humidity</div>
+              <div class="kpi-val"><span id="hum">--</span> <span class="unit">%RH</span></div>
+              <div class="bar"><div id="humBar" class="bar-fill" style="width:0%"></div></div>
+            </div>
+
+            <div class="kpi">
+              <div class="kpi-title">Dew Point</div>
+              <div class="kpi-val"><span id="dew">--.-</span> <span class="unit">°C</span></div>
+              <div class="hint">คำนวณจาก T & RH (Magnus)</div>
+            </div>
+
+            <div class="meta">
+              <div>Device: <b id="dev">—</b></div>
+              <div>Last update: <span id="last">—</span></div>
+              <div class="tiny dim">Auto refresh <span id="poll">—</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- กราฟสปาร์คไลน์ -->
+      <section class="card">
+        <div class="card-head">
+          <h2>Recent Trend</h2>
+          <div class="legend">
+            <span class="lg temp">Temp</span>
+            <span class="lg hum">Humidity</span>
+          </div>
+        </div>
+        <canvas id="chart" width="900" height="240" aria-label="Temperature & Humidity Sparkline"></canvas>
+        <div class="dim tiny">แสดงผลย้อนหลังจาก API /api/readings?device_id=...&limit=50</div>
+      </section>
+
+      <!-- เคล็ดลับ / สถานะ -->
+      <section class="card tips">
+        <h2>Tips</h2>
+        <ul>
+          <li>ถ้าค่าไม่นิ่ง: อ่านซ้ำ 3 ครั้งแล้วเฉลี่ยก่อนส่ง</li>
+          <li>เช็ก pull-up 10k ระหว่าง VCC–DATA ของ DHT11</li>
+          <li>ปรับช่วงอัปเดตให้พอดี เพื่อประหยัดพลังงาน</li>
+        </ul>
+      </section>
     </main>
+
+    <footer class="foot">
+      <span class="dim tiny">© <span id="yr"></span> ESP32 Live Dashboard</span>
+    </footer>
+  </div>
+
+  <!-- ข้อความเริ่มต้น -->
+  <div id="emptyHint" class="empty">
+    เชื่อมต่อ ESP32 แล้วแฟลชเฟิร์มแวร์ — ข้อมูลจะปรากฏที่นี่เมื่อออนไลน์
   </div>
 </body>
 </html>
