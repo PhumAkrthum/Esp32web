@@ -10,7 +10,7 @@
   const THRESH_SEC = CFG.ONLINE_THRESHOLD_SEC ?? CFG.THRESHOLD_SEC ?? CFG.STATUS_THRESHOLD_SEC ?? 30;
 
   // ===== คอนฟิกกราฟ =====
-  const AXIS_MODE = "auto"; // "fixed" | "auto"  <<<<< สำคัญ: ใช้ "auto" เพื่อให้สเกลตามค่าจริง
+  const AXIS_MODE = "auto"; // "fixed" | "auto"  << ใช้ "auto" เพื่อให้สเกลตามค่าจริง
   const AXIS = {
     temp: { min: 31.5, max: 33.5 }, // ใช้เมื่อ AXIS_MODE = "fixed"
     hum:  { min: 60,   max: 90   },
@@ -178,7 +178,7 @@
       ymin = opts.yRange.min; ymax = opts.yRange.max;
     } else {
       const vmin = Math.min(...ys), vmax = Math.max(...ys);
-      let pad = (vmax - vmin) * 0.15;               // เผื่อขอบ 15%
+      let pad = (vmax - vmin) * 0.15; // เผื่อขอบ 15%
       if (!isFinite(pad) || pad === 0) pad = Math.abs(vmin || 1) * 0.1; // กรณีมีจุดเดียว/คงที่
       ymin = vmin - pad;
       ymax = vmax + pad;
@@ -200,40 +200,72 @@
       ctx.fillText(tv.toFixed(dec), m.l - 6, y);
     });
 
-    // ==== Grid X (แสดงป้ายทุก ~1 นาที และต้องห่างกัน >= 60px) ====
+    // ==== Grid X (เลือกป้ายให้ไม่ซ้อน + ชิดขอบซ้าย/ขวา) ====
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
 
-    let lastLabelX = -1e9;
-    let lastLabelTs = 0;
+    const toTs = (v) => (v instanceof Date ? v.getTime() : new Date(v).getTime());
 
-    function drawXTick(i, force = false) {
-      const x  = xAt(i);
-      const ts = xs[i] instanceof Date ? xs[i].getTime() : new Date(xs[i]).getTime();
+    function pickXLabelIndices() {
+      const idx = [];
+      if (N === 0) return idx;
 
-      const farEnoughPx  = (x - lastLabelX) >= X_MIN_LABEL_GAP_PX;
-      const farEnoughMin = (ts - lastLabelTs) >= X_LABEL_STEP_MS;
+      let lastX = -Infinity;
+      let lastTs = 0;
 
-      if (force || (farEnoughPx && farEnoughMin)) {
-        // เส้นตั้ง
-        ctx.beginPath();
-        ctx.moveTo(x, m.t);
-        ctx.lineTo(x, H - m.b);
-        ctx.stroke();
+      for (let i = 0; i < N; i++) {
+        const x = xAt(i);
+        const ts = toTs(xs[i]);
+        const farPx = (x - lastX) >= X_MIN_LABEL_GAP_PX;
+        const farTm = (ts - lastTs) >= X_LABEL_STEP_MS;
 
-        // ป้ายเวลา (HH:MM)
-        const d = xs[i];
-        const label = d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
-        ctx.fillText(label, x, H - m.b + 6);
-
-        lastLabelX = x;
-        lastLabelTs = ts;
+        if (i === 0 || (farPx && farTm) || i === N - 1) {
+          if (idx.length === 0 || idx[idx.length - 1] !== i) {
+            idx.push(i);
+            lastX = x;
+            lastTs = ts;
+          }
+        }
       }
+
+      // ถ้าป้ายสุดท้ายชนกับตัวก่อนหน้า ให้คงตัวสุดท้ายไว้แล้วลบตัวก่อนหน้า
+      if (idx.length >= 2) {
+        const a = idx[idx.length - 2];
+        const b = idx[idx.length - 1];
+        const xa = xAt(a), xb = xAt(b);
+        const tsa = toTs(xs[a]), tsb = toTs(xs[b]);
+        if ((xb - xa) < X_MIN_LABEL_GAP_PX || (tsb - tsa) < X_LABEL_STEP_MS) {
+          idx.splice(idx.length - 2, 1);
+        }
+      }
+      return idx;
     }
 
-    if (N > 0) drawXTick(0, true);        // ป้ายจุดแรก
-    for (let i = 1; i < N - 1; i++) drawXTick(i); // ปักตามเงื่อนไข
-    if (N > 1) drawXTick(N - 1, true);    // ป้ายจุดท้าย
+    const labelsIdx = pickXLabelIndices();
+
+    // วาดเส้นตั้ง + ป้ายเวลา (ริมซ้ายชิดซ้าย / ริมขวาชิดขวา)
+    labelsIdx.forEach((i) => {
+      const x = xAt(i);
+
+      ctx.beginPath();
+      ctx.moveTo(x, m.t);
+      ctx.lineTo(x, H - m.b);
+      ctx.stroke();
+
+      const d = xs[i];
+      const label = d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+
+      if (i === 0) {
+        ctx.textAlign = "left";
+        ctx.fillText(label, x + 2, H - m.b + 6);
+      } else if (i === N - 1) {
+        ctx.textAlign = "right";
+        ctx.fillText(label, x - 2, H - m.b + 6);
+      } else {
+        ctx.textAlign = "center";
+        ctx.fillText(label, x, H - m.b + 6);
+      }
+    });
 
     // เส้นกราฟ
     ctx.lineWidth = 2.2;
@@ -279,7 +311,7 @@
         .filter(s => isFinite(s.t) && isFinite(s.h))
         .sort((a, b) => a.at - b.at);
 
-      const lastN = rows.slice(-limit); // ใช้จำนวนจุดตามปุ่ม
+      const lastN = rows.slice(-limit);
       const xs = lastN.map(r => r.at);
       const ts = lastN.map(r => r.t);
       const hs = lastN.map(r => r.h);
