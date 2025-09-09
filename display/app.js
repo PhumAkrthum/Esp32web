@@ -1,5 +1,6 @@
 // display/app.js
 // Live dashboard: สเกล Y อัตโนมัติ และแกน X อ้างอิงเวลาแท้ (เส้น/ป้ายทุก 1 นาที)
+// แก้ชนมุมซ้ายล่าง: เพิ่ม margin ล่าง, ยกป้าย Y ล่างสุดขึ้น, และเลื่อนป้าย X ลง
 
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
@@ -156,8 +157,8 @@
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // พื้นที่วาดเท่ากันทุกใบ
-    const m = { l: 43, r: 12, t: 10, b: 32 };
+    // พื้นที่วาดเท่ากันทุกใบ (เพิ่ม margin ล่าง/ซ้ายกันชน)
+    const m = { l: 46, r: 12, t: 10, b: 38 };
     const W = cssW, H = cssH;
     const iw = W - m.l - m.r, ih = H - m.t - m.b;
 
@@ -177,7 +178,6 @@
     let tMin = Math.min(...tsArr);
     let tMax = Math.max(...tsArr);
     if (tMax - tMin < MIN_TIME_SPAN_MS) {
-      // ขยายช่วงเวลาอย่างน้อย 2 นาที เพื่อให้เห็นระยะห่างชัด
       const mid = (tMin + tMax) / 2;
       tMin = mid - MIN_TIME_SPAN_MS / 2;
       tMax = mid + MIN_TIME_SPAN_MS / 2;
@@ -198,7 +198,7 @@
     const T = niceTicks(ymin, ymax);
     const yAt = (v) => m.t + ih - ih * ((v - T.min) / Math.max(1e-9, (T.max - T.min)));
 
-    // ===== Grid Y + labels
+    // ===== Grid Y + labels (ยกป้าย Y ล่างสุดขึ้นเล็กน้อย)
     ctx.strokeStyle = "rgba(255,255,255,.14)";
     ctx.lineWidth = 1;
     ctx.font = "12px system-ui, sans-serif";
@@ -206,18 +206,20 @@
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     const dec = T.step >= 1 ? 0 : (T.step >= 0.1 ? 1 : 2);
-    T.ticks.forEach(tv => {
+    T.ticks.forEach((tv, i) => {
       const y = yAt(tv);
       ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(W - m.r, y); ctx.stroke();
-      ctx.fillText(tv.toFixed(dec), m.l - 6, y);
+      const yLabel = (i === 0) ? (y - 8) : y; // ยก tick ล่างสุดขึ้น 8px กันชนกับป้าย X
+      ctx.fillText(tv.toFixed(dec), m.l - 6, yLabel);
     });
 
-    // ===== Grid X: ขีดทุก "นาที" เท่ากัน + เลือกป้ายตามช่องว่าง
+    // ===== Grid X: ขีดทุกนาที + เลือกป้ายตามช่องว่าง และเลื่อนป้าย X ลง
     ctx.textBaseline = "top";
     const startMin = floorToMinute(tMin);
     const endMin   = ceilToMinute(tMax);
     const pxPerMin = xAtTs(startMin + X_TICK_MS) - xAtTs(startMin);
     const labelEvery = Math.max(1, Math.ceil(X_MIN_LABEL_GAP_PX / Math.max(1, pxPerMin)));
+    const xLabelY = H - m.b + 10; // เลื่อนป้าย X ลง 10px
 
     let idx = 0;
     for (let t = startMin; t <= endMin; t += X_TICK_MS, idx++) {
@@ -227,21 +229,19 @@
       ctx.strokeStyle = "rgba(255,255,255,.14)";
       ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
 
-      // ป้ายเวลา: เลือกเฉพาะทุก labelEvery นาที
+      // ป้ายเวลา
       if (idx % labelEvery === 0 || t === startMin || t === endMin) {
         const d = new Date(t);
         const label = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-        // กันล้นขอบ: ซ้ายชิดซ้าย, ขวาชิดขวา
         if (t === startMin) {
           ctx.textAlign = "left";
-          ctx.fillText(label, x + 2, H - m.b + 6);
+          ctx.fillText(label, x + 2, xLabelY);
         } else if (t === endMin) {
           ctx.textAlign = "right";
-          ctx.fillText(label, x - 2, H - m.b + 6);
+          ctx.fillText(label, x - 2, xLabelY);
         } else {
           ctx.textAlign = "center";
-          ctx.fillText(label, x, H - m.b + 6);
+          ctx.fillText(label, x, xLabelY);
         }
       }
     }
@@ -278,7 +278,7 @@
   function pickArray(j) { return Array.isArray(j) ? j : j?.data || []; }
   function parseReading(o) {
     const t = Number(o.temperature ?? o.temp ?? o.t ?? o.value?.temperature);
-    const h = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
+    the h = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
     const ts = o.updated_at ?? o.created_at ?? o.ts ?? o.time ?? o.at;
     return { t, h, at: ts ? new Date(ts) : new Date() };
   }
