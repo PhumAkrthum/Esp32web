@@ -1,6 +1,6 @@
 // display/app.js
-// Live dashboard: สเกล Y อัตโนมัติ และแกน X อ้างอิงเวลาแท้ (เส้น/ป้ายทุก 1 นาที)
-// แก้ชนมุมซ้ายล่าง: เพิ่ม margin ล่าง, ยกป้าย Y ล่างสุดขึ้น, และเลื่อนป้าย X ลง
+// Live dashboard: Y auto-scale, X เป็นเวลาแท้ ขีดทุก 1 นาที
+// หน้าต่างเวลา FIX 4 นาที + กันชนมุมซ้ายล่าง
 
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
@@ -17,13 +17,14 @@
     dew:  { min: 26,   max: 32   },
   };
 
-  let LIVE_POINTS = 50;   // ปุ่ม Last 50/200/500 จะเซ็ตค่านี้
-  const Y_GRID_LINES = 6; // เส้นกริดแนวนอน
+  let LIVE_POINTS = 50;           // ใช้ร่วมกับปุ่ม Last 50/200/500
+  const Y_GRID_LINES = 6;
 
-  // === แกน X แบบเวลา ===
-  const X_TICK_MS          = 60 * 1000; // เส้น/ป้ายทุก 1 นาที
-  const X_MIN_LABEL_GAP_PX = 60;        // ระยะพิกเซลขั้นต่ำระหว่าง “ป้าย” (เส้นยังขีดทุกนาที)
-  const MIN_TIME_SPAN_MS   = 2 * 60 * 1000; // อย่างน้อย 2 นาทีเพื่อกันเส้นทับเมื่อข้อมูลน้อย
+  // === แกน X แบบเวลา: เส้น/ป้ายทุก "นาที" + หน้าต่างคงที่ 4 นาที ===
+  const TIME_WINDOW_MIN = 4;
+  const TIME_WINDOW_MS  = TIME_WINDOW_MIN * 60 * 1000;
+  const X_TICK_MS          = 60 * 1000; // ขีดทุก 1 นาที
+  const X_MIN_LABEL_GAP_PX = 60;        // ป้ายเวลาต้องห่างกันอย่างน้อยเท่านี้
 
   const $ = (s) => document.querySelector(s);
   const el = {
@@ -157,7 +158,7 @@
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // พื้นที่วาดเท่ากันทุกใบ (เพิ่ม margin ล่าง/ซ้ายกันชน)
+    // พื้นที่วาด (เพิ่ม margin กันป้ายชน)
     const m = { l: 46, r: 12, t: 10, b: 38 };
     const W = cssW, H = cssH;
     const iw = W - m.l - m.r, ih = H - m.t - m.b;
@@ -173,15 +174,11 @@
       return;
     }
 
-    // ===== X: scale ตาม "เวลาแท้"
+    // ===== X: ใช้ช่วงเวลา "4 นาทีล่าสุด" คงที่
     const tsArr = xs.map(toMs);
-    let tMin = Math.min(...tsArr);
-    let tMax = Math.max(...tsArr);
-    if (tMax - tMin < MIN_TIME_SPAN_MS) {
-      const mid = (tMin + tMax) / 2;
-      tMin = mid - MIN_TIME_SPAN_MS / 2;
-      tMax = mid + MIN_TIME_SPAN_MS / 2;
-    }
+    let tMax = Math.max(...tsArr, Date.now());   // ผูกกับปัจจุบันให้ไทม์ไลน์นิ่ง
+    let tMin = tMax - TIME_WINDOW_MS;            // 4 นาทีล่าสุด
+
     const xAtTs = (t) => m.l + iw * ((t - tMin) / Math.max(1, (tMax - tMin)));
 
     // ===== Y: fixed หรือ auto (พร้อมระยะเผื่อ)
@@ -209,17 +206,17 @@
     T.ticks.forEach((tv, i) => {
       const y = yAt(tv);
       ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(W - m.r, y); ctx.stroke();
-      const yLabel = (i === 0) ? (y - 8) : y; // ยก tick ล่างสุดขึ้น 8px กันชนกับป้าย X
+      const yLabel = (i === 0) ? (y - 8) : y;
       ctx.fillText(tv.toFixed(dec), m.l - 6, yLabel);
     });
 
-    // ===== Grid X: ขีดทุกนาที + เลือกป้ายตามช่องว่าง และเลื่อนป้าย X ลง
+    // ===== Grid X: ขีดทุก 1 นาที + ป้ายตามช่องว่าง
     ctx.textBaseline = "top";
     const startMin = floorToMinute(tMin);
     const endMin   = ceilToMinute(tMax);
     const pxPerMin = xAtTs(startMin + X_TICK_MS) - xAtTs(startMin);
     const labelEvery = Math.max(1, Math.ceil(X_MIN_LABEL_GAP_PX / Math.max(1, pxPerMin)));
-    const xLabelY = H - m.b + 10; // เลื่อนป้าย X ลง 10px
+    const xLabelY = H - m.b + 10;
 
     let idx = 0;
     for (let t = startMin; t <= endMin; t += X_TICK_MS, idx++) {
@@ -234,19 +231,16 @@
         const d = new Date(t);
         const label = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         if (t === startMin) {
-          ctx.textAlign = "left";
-          ctx.fillText(label, x + 2, xLabelY);
+          ctx.textAlign = "left";  ctx.fillText(label, x + 2, xLabelY);
         } else if (t === endMin) {
-          ctx.textAlign = "right";
-          ctx.fillText(label, x - 2, xLabelY);
+          ctx.textAlign = "right"; ctx.fillText(label, x - 2, xLabelY);
         } else {
-          ctx.textAlign = "center";
-          ctx.fillText(label, x, xLabelY);
+          ctx.textAlign = "center";ctx.fillText(label, x,     xLabelY);
         }
       }
     }
 
-    // ===== เส้นกราฟ (อ้างอิงเวลาจริง)
+    // ===== เส้นกราฟ (พล็อตตามเวลาจริง)
     ctx.lineWidth = 2.2;
     ctx.strokeStyle = opts.stroke || "rgba(96,165,250,.95)";
     ctx.beginPath();
@@ -277,8 +271,8 @@
 
   function pickArray(j) { return Array.isArray(j) ? j : j?.data || []; }
   function parseReading(o) {
-    const t = Number(o.temperature ?? o.temp ?? o.t ?? o.value?.temperature);
-    const h = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
+    const t  = Number(o.temperature ?? o.temp ?? o.t ?? o.value?.temperature);
+    const h  = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
     const ts = o.updated_at ?? o.created_at ?? o.ts ?? o.time ?? o.at;
     return { t, h, at: ts ? new Date(ts) : new Date() };
   }
