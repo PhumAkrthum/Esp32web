@@ -25,6 +25,7 @@
   const TIME_WINDOW_MS  = TIME_WINDOW_MIN * 60 * 1000;
   const X_TICK_MS          = 60 * 1000; // ขีดทุก 1 นาที
   const X_MIN_LABEL_GAP_PX = 60;        // ป้ายเวลาต้องห่างกันอย่างน้อยเท่านี้
+  const TARGET_LABELS      = 5;         // จำนวนป้ายเวลาที่อยากได้ (กระจายเท่าๆ กัน)
 
   const $ = (s) => document.querySelector(s);
   const el = {
@@ -210,24 +211,31 @@
       ctx.fillText(tv.toFixed(dec), m.l - 6, yLabel);
     });
 
-    // ===== Grid X: ขีดทุก 1 นาที + ป้ายตามช่องว่าง
+    // ===== Grid X: เส้นตั้งทุก 1 นาที + ป้ายเวลา “เว้นเท่าๆ กัน”
     ctx.textBaseline = "top";
     const startMin = floorToMinute(tMin);
     const endMin   = ceilToMinute(tMax);
     const pxPerMin = xAtTs(startMin + X_TICK_MS) - xAtTs(startMin);
-    const labelEvery = Math.max(1, Math.ceil(X_MIN_LABEL_GAP_PX / Math.max(1, pxPerMin)));
-    const xLabelY = H - m.b + 10;
 
-    let idx = 0;
-    for (let t = startMin; t <= endMin; t += X_TICK_MS, idx++) {
+    // วาดเส้นตั้งทุกนาที
+    for (let t = startMin; t <= endMin; t += X_TICK_MS) {
       const x = xAtTs(t);
-
-      // เส้นตั้งทุกนาที
       ctx.strokeStyle = "rgba(255,255,255,.14)";
       ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
+    }
 
-      // ป้ายเวลา
+    // คำนวณช่วงแสดงป้ายให้สวยและไม่เบียด
+    const totalMins = Math.max(1, Math.round((endMin - startMin) / 60000));
+    const labelEveryTarget = Math.max(1, Math.round(totalMins / (Math.max(2, TARGET_LABELS) - 1)));
+    const labelEveryGap    = Math.max(1, Math.ceil(X_MIN_LABEL_GAP_PX / Math.max(1, pxPerMin)));
+    const labelEvery       = Math.max(labelEveryTarget, labelEveryGap);
+
+    const xLabelY = H - m.b + 10;
+    let idx = 0;
+    for (let t = startMin; t <= endMin; t += X_TICK_MS, idx++) {
+      // แสดงป้ายตามช่วงที่คำนวณไว้ + บังคับโชว์ต้น/ท้าย
       if (idx % labelEvery === 0 || t === startMin || t === endMin) {
+        const x = xAtTs(t);
         const d = new Date(t);
         const label = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         if (t === startMin) {
