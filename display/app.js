@@ -278,7 +278,7 @@
   function pickArray(j) { return Array.isArray(j) ? j : j?.data || []; }
   function parseReading(o) {
     const t = Number(o.temperature ?? o.temp ?? o.t ?? o.value?.temperature);
-    the h = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
+    theh = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
     const ts = o.updated_at ?? o.created_at ?? o.ts ?? o.time ?? o.at;
     return { t, h, at: ts ? new Date(ts) : new Date() };
   }
