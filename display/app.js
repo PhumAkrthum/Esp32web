@@ -20,6 +20,10 @@
   let LIVE_POINTS = 50;   // จำนวนจุดล่าสุดที่จะแสดง (สลับได้ด้วยปุ่ม Last 50/200/500)
   const Y_GRID_LINES = 6; // เส้นกริดแนวนอนเท่ากันทุกใบ
 
+  // === คอนฟิกป้ายเวลาแกน X ===
+  const X_LABEL_STEP_MS    = 60 * 1000; // เว้นทุก ~1 นาที (ปรับได้)
+  const X_MIN_LABEL_GAP_PX = 60;        // ป้ายต้องห่างกันอย่างน้อย 60px
+
   const $ = (s) => document.querySelector(s);
   const el = {
     status: $("#status"),
@@ -196,16 +200,40 @@
       ctx.fillText(tv.toFixed(dec), m.l - 6, y);
     });
 
-    // Grid X (ตามจุดเวลา)
+    // ==== Grid X (แสดงป้ายทุก ~1 นาที และต้องห่างกัน >= 60px) ====
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    for (let i = 0; i < N; i++) {
-      const x = xAt(i);
-      ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
-      const d = xs[i];
-      const label = d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
-      ctx.fillText(label, x, H - m.b + 6);
+
+    let lastLabelX = -1e9;
+    let lastLabelTs = 0;
+
+    function drawXTick(i, force = false) {
+      const x  = xAt(i);
+      const ts = xs[i] instanceof Date ? xs[i].getTime() : new Date(xs[i]).getTime();
+
+      const farEnoughPx  = (x - lastLabelX) >= X_MIN_LABEL_GAP_PX;
+      const farEnoughMin = (ts - lastLabelTs) >= X_LABEL_STEP_MS;
+
+      if (force || (farEnoughPx && farEnoughMin)) {
+        // เส้นตั้ง
+        ctx.beginPath();
+        ctx.moveTo(x, m.t);
+        ctx.lineTo(x, H - m.b);
+        ctx.stroke();
+
+        // ป้ายเวลา (HH:MM)
+        const d = xs[i];
+        const label = d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
+        ctx.fillText(label, x, H - m.b + 6);
+
+        lastLabelX = x;
+        lastLabelTs = ts;
+      }
     }
+
+    if (N > 0) drawXTick(0, true);        // ป้ายจุดแรก
+    for (let i = 1; i < N - 1; i++) drawXTick(i); // ปักตามเงื่อนไข
+    if (N > 1) drawXTick(N - 1, true);    // ป้ายจุดท้าย
 
     // เส้นกราฟ
     ctx.lineWidth = 2.2;
