@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ESP32 DHT11 • Live Dashboard</title>
   <link rel="stylesheet" href="/style.css" />
+  <!-- ปรับค่า API_BASE / DEVICE_ID / POLL_MS ที่ config.js -->
   <script defer src="/config.js"></script>
   <script defer src="/app.js"></script>
 </head>
@@ -73,7 +74,7 @@
         </div>
       </section>
 
-      <!-- การ์ดอนิเมะ (ขยายเล็กน้อย) -->
+      <!-- การ์ดอนิเมะ -->
       <section class="card anime" aria-label="anime card">
         <div class="anime-wrap">
           <svg class="mascot" viewBox="0 0 200 140" aria-hidden="true">
@@ -138,9 +139,9 @@
           </div>
         </div>
 
-               <div class="dim tiny"></div>
+        <div class="dim tiny"></div>
       </section>
-    </main>  <!-- <<< ปิด main ให้เรียบร้อย -->
+    </main>
 
     <footer class="foot">
       <span class="dim tiny">© <span id="yr"></span> ESP32 Live Dashboard</span>
@@ -152,4 +153,3 @@
   </div>
 </body>
 </html>
-

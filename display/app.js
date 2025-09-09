@@ -1,5 +1,6 @@
 // display/app.js
-// ทำให้กราฟ 3 ใบสเกลเท่ากันเสมอ + ใช้ 5 จุดล่าสุด + ช่องห่างเท่ากัน
+// Live dashboard: กราฟ 3 ใบปรับสเกล Y อัตโนมัติจากข้อมูลล่าสุดเสมอ
+// รองรับปุ่ม Last 50/200/500 เพื่อเลือกจำนวนจุดที่แสดง
 
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
@@ -8,15 +9,16 @@
   const POLL_MS = (CFG.POLL_MS | 0) || 5000;
   const THRESH_SEC = CFG.ONLINE_THRESHOLD_SEC ?? CFG.THRESHOLD_SEC ?? CFG.STATUS_THRESHOLD_SEC ?? 30;
 
-  // ----- ปรับสเกลคงที่ต่อกราฟที่นี่ -----
-  const AXIS_MODE = "fixed"; // "fixed" | "auto"
+  // ===== คอนฟิกกราฟ =====
+  const AXIS_MODE = "auto"; // "fixed" | "auto"  <<<<< สำคัญ: ใช้ "auto" เพื่อให้สเกลตามค่าจริง
   const AXIS = {
-    temp: { min: 31.5, max: 33.5 },   // ปรับได้ตามสภาพจริง
+    temp: { min: 31.5, max: 33.5 }, // ใช้เมื่อ AXIS_MODE = "fixed"
     hum:  { min: 60,   max: 90   },
     dew:  { min: 26,   max: 32   },
   };
-  const LIVE_POINTS = 5;   // แสดง 5 จุดล่าสุดเสมอ
-  const Y_GRID_LINES = 6;  // เส้นกริดแนวนอนเท่ากันทุกใบ
+
+  let LIVE_POINTS = 50;   // จำนวนจุดล่าสุดที่จะแสดง (สลับได้ด้วยปุ่ม Last 50/200/500)
+  const Y_GRID_LINES = 6; // เส้นกริดแนวนอนเท่ากันทุกใบ
 
   const $ = (s) => document.querySelector(s);
   const el = {
@@ -31,12 +33,10 @@
     humBar: $("#humBar"),
     card: $("#card"),
 
-    // กราฟ 3 ใบ (ต้องมีใน index.html)
     chartT: $("#chartT"),
     chartH: $("#chartH"),
     chartD: $("#chartD"),
 
-    // ค่าหัวกราฟ
     lastT: $("#lastT"),  nowT: $("#nowT"),
     lastH: $("#lastH"),  nowH: $("#nowH"),
     lastD: $("#lastD"),  nowD: $("#nowD"),
@@ -50,7 +50,7 @@
   el.dev && (el.dev.textContent = DEVICE_ID);
   el.poll && (el.poll.textContent = (POLL_MS / 1000).toFixed(0) + "s");
 
-  // Theme
+  // ===== Theme =====
   const LS_KEY = "esp32-theme";
   const setTheme = (m) => {
     document.documentElement.classList.toggle("light", m === "light");
@@ -61,7 +61,7 @@
     setTheme((localStorage.getItem(LS_KEY) || "dark") === "dark" ? "light" : "dark");
   });
 
-  // Helpers
+  // ===== Helpers =====
   async function fetchJSON(url) {
     const r = await fetch(url, { cache: "no-store" });
     if (!r.ok) throw new Error(`HTTP ${r.status} @ ${url}`);
@@ -97,7 +97,7 @@
     el.dew && (el.dew.textContent = isFinite(dp) ? dp.toFixed(1) : "--.-");
   }
 
-  // API
+  // ===== API Endpoints =====
   const URL_STATUS = `${API_BASE}/api/status/${encodeURIComponent(DEVICE_ID)}?threshold_sec=${THRESH_SEC}`;
   const URL_LATESTS = [
     `${API_BASE}/api/readings/latest?device_id=${encodeURIComponent(DEVICE_ID)}`,
@@ -121,7 +121,7 @@
     return null;
   }
 
-  // ======= Draw utils =======
+  // ===== วาดกราฟ (Canvas 2D) =====
   function niceTicks(min, max) {
     const span = max - min;
     const raw = span / (Y_GRID_LINES - 1);
@@ -158,23 +158,26 @@
     if (!xs.length || !ys.length) {
       ctx.fillStyle = "#fff";
       ctx.globalAlpha = 0.8;
+      ctx.font = "12px system-ui, sans-serif";
       ctx.fillText("No data", m.l + 8, m.t + 16);
       ctx.globalAlpha = 1;
       return;
     }
 
-    // X: คงที่ N จุด
+    // X: ช่องเท่ากันตามจำนวนจุด
     const N = xs.length;
     const xAt = (i) => m.l + (iw * (N === 1 ? 0 : i / (N - 1)));
 
-    // Y: fixed หรือ auto
+    // Y: fixed หรือ auto (พร้อมระยะเผื่อ)
     let ymin, ymax;
     if (opts.yRange && AXIS_MODE === "fixed") {
       ymin = opts.yRange.min; ymax = opts.yRange.max;
     } else {
       const vmin = Math.min(...ys), vmax = Math.max(...ys);
-      ymin = vmin; ymax = vmax;
-      if (ymin === ymax) { const r = Math.abs(ymin || 1) * 0.05; ymin -= r; ymax += r; }
+      let pad = (vmax - vmin) * 0.15;               // เผื่อขอบ 15%
+      if (!isFinite(pad) || pad === 0) pad = Math.abs(vmin || 1) * 0.1; // กรณีมีจุดเดียว/คงที่
+      ymin = vmin - pad;
+      ymax = vmax + pad;
     }
     const T = niceTicks(ymin, ymax);
     const yAt = (v) => m.t + ih - ih * ((v - T.min) / Math.max(1e-9, (T.max - T.min)));
@@ -193,7 +196,7 @@
       ctx.fillText(tv.toFixed(dec), m.l - 6, y);
     });
 
-    // Grid X ที่แต่ละจุด (ช่องเท่ากัน)
+    // Grid X (ตามจุดเวลา)
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     for (let i = 0; i < N; i++) {
@@ -215,7 +218,7 @@
     ctx.stroke();
   }
 
-  // ======= state =======
+  // ===== state =====
   let SERIES = { xs: [], t: [], h: [], d: [] };
 
   function setNowClock() {
@@ -240,12 +243,15 @@
     return { t, h, at: ts ? new Date(ts) : new Date() };
   }
 
-  async function loadHistory(limit = 50) {
+  async function loadHistory(limit = LIVE_POINTS) {
     try {
-      const j = await fetchJSON(`${URL_HISTORY(limit)}&_=${Date.now()}`);
-      const rows = pickArray(j).map(parseReading).filter(s => isFinite(s.t) && isFinite(s.h)).sort((a, b) => a.at - b.at);
+      const j = await fetchJSON(`${URL_HISTORY(Math.max(limit, 1))}&_=${Date.now()}`);
+      const rows = pickArray(j)
+        .map(parseReading)
+        .filter(s => isFinite(s.t) && isFinite(s.h))
+        .sort((a, b) => a.at - b.at);
 
-      const lastN = rows.slice(-LIVE_POINTS); // 5 จุดล่าสุด
+      const lastN = rows.slice(-limit); // ใช้จำนวนจุดตามปุ่ม
       const xs = lastN.map(r => r.at);
       const ts = lastN.map(r => r.t);
       const hs = lastN.map(r => r.h);
@@ -273,7 +279,24 @@
     }
   }
 
-  // refresh latest + status
+  // ===== ปุ่มเลือกจำนวนจุด =====
+  function setupRangeButtons() {
+    const btns = document.querySelectorAll(".range");
+    const setActive = (n) => {
+      btns.forEach(b => b.classList.toggle("active", Number(b.dataset.limit) === n));
+    };
+    btns.forEach(b => {
+      b.addEventListener("click", () => {
+        const n = Number(b.dataset.limit) || 50;
+        LIVE_POINTS = n;
+        setActive(n);
+        loadHistory(n);
+      });
+    });
+    setActive(LIVE_POINTS);
+  }
+
+  // ===== refresh latest + status =====
   async function refresh() {
     try {
       const [status, latest] = await Promise.all([
@@ -303,9 +326,10 @@
     }
   }
 
-  // boot
+  // ===== boot =====
+  setupRangeButtons();
   refresh();
-  loadHistory(50);
+  loadHistory(LIVE_POINTS);
   setInterval(refresh, Math.max(3000, POLL_MS));
   setInterval(setNowClock, 1000);
 })();
