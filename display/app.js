@@ -1,6 +1,6 @@
 // display/app.js
 // Live dashboard: Y auto-scale, X เป็นเวลาแท้ ขีดทุก 1 นาที
-// หน้าต่างเวลา FIX 4 นาที + กันชนมุมซ้ายล่าง
+// หน้าต่างเวลา FIX 4 นาที + กันชนมุมซ้ายล่าง + ป้ายเวลาไม่เบียดเส้นกราฟ
 
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
@@ -23,9 +23,10 @@
   // === แกน X แบบเวลา: เส้น/ป้ายทุก "นาที" + หน้าต่างคงที่ 4 นาที ===
   const TIME_WINDOW_MIN = 4;
   const TIME_WINDOW_MS  = TIME_WINDOW_MIN * 60 * 1000;
-  const X_TICK_MS          = 60 * 1000; // ขีดทุก 1 นาที
-  const X_MIN_LABEL_GAP_PX = 60;        // ป้ายเวลาต้องห่างกันอย่างน้อยเท่านี้
-  const TARGET_LABELS      = 5;         // จำนวนป้ายเวลาที่อยากได้ (กระจายเท่าๆ กัน)
+  const X_TICK_MS          = 60 * 1000; // เส้นตั้งทุก 1 นาที
+  const TARGET_LABELS      = 5;         // อยากได้ประมาณกี่ป้ายเวลา/ช่วง
+  const MIN_LABEL_PADDING  = 8;         // กันชนซ้ายขวาของป้าย เวลา (px)
+  const LABEL_BG           = true;      // ใส่พื้นหลังป้ายเพื่อไม่ให้กลืนกับกราฟ
 
   const $ = (s) => document.querySelector(s);
   const el = {
@@ -159,8 +160,8 @@
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // พื้นที่วาด (เพิ่ม margin กันป้ายชน)
-    const m = { l: 46, r: 12, t: 10, b: 38 };
+    // พื้นที่วาด (เพิ่ม margin กันป้ายชน) — เพิ่มล่างให้มากขึ้น
+    const m = { l: 46, r: 12, t: 10, b: 52 };
     const W = cssW, H = cssH;
     const iw = W - m.l - m.r, ih = H - m.t - m.b;
 
@@ -211,41 +212,83 @@
       ctx.fillText(tv.toFixed(dec), m.l - 6, yLabel);
     });
 
-    // ===== Grid X: เส้นตั้งทุก 1 นาที + ป้ายเวลา “เว้นเท่าๆ กัน”
-    ctx.textBaseline = "top";
+    // ===== Grid X: เส้นตั้งทุก 1 นาที
     const startMin = floorToMinute(tMin);
     const endMin   = ceilToMinute(tMax);
-    const pxPerMin = xAtTs(startMin + X_TICK_MS) - xAtTs(startMin);
-
-    // วาดเส้นตั้งทุกนาที
     for (let t = startMin; t <= endMin; t += X_TICK_MS) {
       const x = xAtTs(t);
       ctx.strokeStyle = "rgba(255,255,255,.14)";
       ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
     }
 
-    // คำนวณช่วงแสดงป้ายให้สวยและไม่เบียด
-    const totalMins = Math.max(1, Math.round((endMin - startMin) / 60000));
-    const labelEveryTarget = Math.max(1, Math.round(totalMins / (Math.max(2, TARGET_LABELS) - 1)));
-    const labelEveryGap    = Math.max(1, Math.ceil(X_MIN_LABEL_GAP_PX / Math.max(1, pxPerMin)));
-    const labelEvery       = Math.max(labelEveryTarget, labelEveryGap);
+    // ===== ป้ายเวลา: เว้นเท่าๆ กัน + ไม่ชนกันจริงด้วย measureText
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "rgba(255,255,255,.85)";
+    const xLabelY = H - m.b + 8;
 
-    const xLabelY = H - m.b + 10;
+    const totalMins = Math.max(1, Math.round((endMin - startMin) / 60000));
+    const labelEvery = Math.max(1, Math.round(totalMins / (Math.max(2, TARGET_LABELS) - 1)));
+
     let idx = 0;
+    let lastRight = -Infinity;
+
     for (let t = startMin; t <= endMin; t += X_TICK_MS, idx++) {
-      // แสดงป้ายตามช่วงที่คำนวณไว้ + บังคับโชว์ต้น/ท้าย
-      if (idx % labelEvery === 0 || t === startMin || t === endMin) {
-        const x = xAtTs(t);
-        const d = new Date(t);
-        const label = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        if (t === startMin) {
-          ctx.textAlign = "left";  ctx.fillText(label, x + 2, xLabelY);
-        } else if (t === endMin) {
-          ctx.textAlign = "right"; ctx.fillText(label, x - 2, xLabelY);
-        } else {
-          ctx.textAlign = "center";ctx.fillText(label, x,     xLabelY);
-        }
+      const isEdge = (t === startMin || t === endMin);
+      if (idx % labelEvery !== 0 && !isEdge) continue;
+
+      let x = xAtTs(t);
+      const d = new Date(t);
+      const label = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+      // กำหนดตำแหน่ง + จัดชิด (ซ้าย/ขวาที่ปลาย, กลางที่เหลือ)
+      let align = "center";
+      if (t === startMin) align = "left";
+      else if (t === endMin) align = "right";
+
+      // หาความกว้างป้ายเพื่อกันชน/ไม่ซ้อนกัน
+      ctx.textAlign = align;
+      const w = ctx.measureText(label).width;
+      const half = w / 2;
+
+      // ขอบเขต x ของป้าย
+      let left = x - (align === "center" ? half : (align === "right" ? w : 0));
+      let right = x + (align === "center" ? half : (align === "right" ? 0 : w));
+
+      // บังคับไม่ให้ออกนอกพื้นที่วาด
+      if (left < m.l + MIN_LABEL_PADDING) {
+        x += (m.l + MIN_LABEL_PADDING) - left;
+        left = m.l + MIN_LABEL_PADDING;
+        right = left + w;
       }
+      if (right > W - m.r - MIN_LABEL_PADDING) {
+        x -= right - (W - m.r - MIN_LABEL_PADDING);
+        right = W - m.r - MIN_LABEL_PADDING;
+        left = right - w;
+      }
+
+      // ข้ามถ้าจะชนป้ายก่อนหน้า
+      if (left <= lastRight + MIN_LABEL_PADDING && !isEdge) continue;
+
+      // พื้นหลังป้าย (ช่วยไม่ให้กลืนกับเส้นกราฟ)
+      if (LABEL_BG) {
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,.28)";
+        const padX = 4, padY = 2, radius = 4;
+        const bx = left - padX, by = xLabelY - padY, bw = w + padX * 2, bh = 16 + padY * 2;
+        if (ctx.roundRect) {
+          ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, radius); ctx.fill();
+        } else {
+          ctx.fillRect(bx, by, bw, bh);
+        }
+        ctx.restore();
+      }
+
+      // วาดป้าย
+      ctx.fillStyle = "rgba(255,255,255,.92)";
+      ctx.textAlign = align;
+      ctx.fillText(label, x, xLabelY);
+
+      lastRight = right;
     }
 
     // ===== เส้นกราฟ (พล็อตตามเวลาจริง)
