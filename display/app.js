@@ -1,6 +1,6 @@
 // display/app.js
 // Live dashboard: Y auto-scale, X เป็นเวลาแท้ ขีดทุก 1 นาที
-// หน้าต่างเวลา FIX 4 นาที + กันชนมุมซ้ายล่าง + ป้ายเวลาไม่เบียดเส้นกราฟ
+// หน้าต่างเวลา FIX 4 นาที + ป้ายเวลาเว้นสวย + กันไม่ให้ชนเส้นกราฟ + ตัดป้ายเวลาขวาสุด
 
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
@@ -20,13 +20,16 @@
   let LIVE_POINTS = 50;           // ใช้ร่วมกับปุ่ม Last 50/200/500
   const Y_GRID_LINES = 6;
 
-  // === แกน X แบบเวลา: เส้น/ป้ายทุก "นาที" + หน้าต่างคงที่ 4 นาที ===
+  // === แกน X แบบเวลา: เส้นทุก 1 นาที + หน้าต่างคงที่ 4 นาที ===
   const TIME_WINDOW_MIN = 4;
   const TIME_WINDOW_MS  = TIME_WINDOW_MIN * 60 * 1000;
-  const X_TICK_MS          = 60 * 1000; // เส้นตั้งทุก 1 นาที
-  const TARGET_LABELS      = 5;         // อยากได้ประมาณกี่ป้ายเวลา/ช่วง
-  const MIN_LABEL_PADDING  = 8;         // กันชนซ้ายขวาของป้าย เวลา (px)
-  const LABEL_BG           = true;      // ใส่พื้นหลังป้ายเพื่อไม่ให้กลืนกับกราฟ
+  const X_TICK_MS       = 60 * 1000; // เส้นตั้งทุก 1 นาที
+
+  // การจัดป้ายเวลา
+  const TARGET_LABELS     = 5;   // จำนวนป้ายที่อยากเห็นคร่าวๆ ต่อกราฟ
+  const MIN_LABEL_PADDING = 8;   // กันชนซ้าย/ขวา (px)
+  const LABEL_BG          = true; // ใส่พื้นหลังป้ายกันกลืนกับกราฟ
+  const SKIP_END_LABEL    = true; // ไม่แสดงป้ายเวลาขวาสุด
 
   const $ = (s) => document.querySelector(s);
   const el = {
@@ -160,7 +163,7 @@
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // พื้นที่วาด (เพิ่ม margin กันป้ายชน) — เพิ่มล่างให้มากขึ้น
+    // พื้นที่วาด (เพิ่ม margin ล่างให้ป้ายไม่ชนกรอบ)
     const m = { l: 46, r: 12, t: 10, b: 52 };
     const W = cssW, H = cssH;
     const iw = W - m.l - m.r, ih = H - m.t - m.b;
@@ -221,7 +224,7 @@
       ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
     }
 
-    // ===== ป้ายเวลา: เว้นเท่าๆ กัน + ไม่ชนกันจริงด้วย measureText
+    // ===== ป้ายเวลา: เว้นเท่าๆ กัน + กันซ้อนด้วย measureText + ตัดป้ายขวาสุด
     ctx.textBaseline = "top";
     ctx.fillStyle = "rgba(255,255,255,.85)";
     const xLabelY = H - m.b + 8;
@@ -233,28 +236,30 @@
     let lastRight = -Infinity;
 
     for (let t = startMin; t <= endMin; t += X_TICK_MS, idx++) {
-      const isEdge = (t === startMin || t === endMin);
-      if (idx % labelEvery !== 0 && !isEdge) continue;
+      const isStart = (t === startMin);
+      const isEnd   = (t === endMin);
+
+      // ตัดป้ายเวลาขวาสุด
+      if (SKIP_END_LABEL && isEnd) continue;
+
+      // โชว์เฉพาะตำแหน่งที่เว้นไว้ หรือจุดเริ่ม
+      if (idx % labelEvery !== 0 && !isStart) continue;
 
       let x = xAtTs(t);
       const d = new Date(t);
       const label = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-      // กำหนดตำแหน่ง + จัดชิด (ซ้าย/ขวาที่ปลาย, กลางที่เหลือ)
-      let align = "center";
-      if (t === startMin) align = "left";
-      else if (t === endMin) align = "right";
+      // เริ่ม = left, ที่เหลือ = center
+      let align = isStart ? "left" : "center";
 
-      // หาความกว้างป้ายเพื่อกันชน/ไม่ซ้อนกัน
       ctx.textAlign = align;
       const w = ctx.measureText(label).width;
       const half = w / 2;
 
-      // ขอบเขต x ของป้าย
-      let left = x - (align === "center" ? half : (align === "right" ? w : 0));
-      let right = x + (align === "center" ? half : (align === "right" ? 0 : w));
+      let left = x - (align === "center" ? half : 0);
+      let right = x + (align === "center" ? half : w);
 
-      // บังคับไม่ให้ออกนอกพื้นที่วาด
+      // ไม่ให้ออกนอกพื้นที่วาด
       if (left < m.l + MIN_LABEL_PADDING) {
         x += (m.l + MIN_LABEL_PADDING) - left;
         left = m.l + MIN_LABEL_PADDING;
@@ -266,20 +271,17 @@
         left = right - w;
       }
 
-      // ข้ามถ้าจะชนป้ายก่อนหน้า
-      if (left <= lastRight + MIN_LABEL_PADDING && !isEdge) continue;
+      // กันชนกับป้ายก่อนหน้า (ยกเว้นป้ายแรก)
+      if (!isStart && left <= lastRight + MIN_LABEL_PADDING) continue;
 
-      // พื้นหลังป้าย (ช่วยไม่ให้กลืนกับเส้นกราฟ)
+      // พื้นหลังป้าย
       if (LABEL_BG) {
         ctx.save();
         ctx.fillStyle = "rgba(0,0,0,.28)";
         const padX = 4, padY = 2, radius = 4;
         const bx = left - padX, by = xLabelY - padY, bw = w + padX * 2, bh = 16 + padY * 2;
-        if (ctx.roundRect) {
-          ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, radius); ctx.fill();
-        } else {
-          ctx.fillRect(bx, by, bw, bh);
-        }
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, radius); ctx.fill(); }
+        else { ctx.fillRect(bx, by, bw, bh); }
         ctx.restore();
       }
 
