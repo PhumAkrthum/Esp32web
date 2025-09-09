@@ -200,7 +200,7 @@
       ctx.fillText(tv.toFixed(dec), m.l - 6, y);
     });
 
-    // ==== Grid X (เลือกป้ายให้ไม่ซ้อน + ชิดขอบซ้าย/ขวา) ====
+    // ==== Grid X (เลือกป้ายให้ไม่ซ้อน + การันตีหัว–ท้าย) ====
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
 
@@ -210,34 +210,46 @@
       const idx = [];
       if (N === 0) return idx;
 
-      let lastX = -Infinity;
-      let lastTs = 0;
+      // บังคับตัวแรกเสมอ
+      idx.push(0);
+      let lastX = xAt(0);
+      let lastTs = toTs(xs[0]);
 
-      for (let i = 0; i < N; i++) {
+      // เลือกตัวกลาง ๆ ตามกติกาเวลา+พิกเซล
+      for (let i = 1; i < N - 1; i++) {
         const x = xAt(i);
         const ts = toTs(xs[i]);
-        const farPx = (x - lastX) >= X_MIN_LABEL_GAP_PX;
-        const farTm = (ts - lastTs) >= X_LABEL_STEP_MS;
-
-        if (i === 0 || (farPx && farTm) || i === N - 1) {
-          if (idx.length === 0 || idx[idx.length - 1] !== i) {
-            idx.push(i);
-            lastX = x;
-            lastTs = ts;
-          }
+        if ((x - lastX) >= X_MIN_LABEL_GAP_PX && (ts - lastTs) >= X_LABEL_STEP_MS) {
+          idx.push(i);
+          lastX = x;
+          lastTs = ts;
         }
       }
 
-      // ถ้าป้ายสุดท้ายชนกับตัวก่อนหน้า ให้คงตัวสุดท้ายไว้แล้วลบตัวก่อนหน้า
+      // จัดการตัวสุดท้าย: ถ้าใกล้เกิน ให้แทนที่ตัวก่อนหน้า
+      if (N > 1) {
+        const lastI = N - 1;
+        const x = xAt(lastI);
+        const ts = toTs(xs[lastI]);
+        if ((x - lastX) >= X_MIN_LABEL_GAP_PX && (ts - lastTs) >= X_LABEL_STEP_MS) {
+          idx.push(lastI);
+        } else {
+          // แทนที่ตัวสุดท้ายเข้าไปแทนจุดก่อนหน้า เพื่อกันซ้อนปลาย
+          if (idx.length) idx[idx.length - 1] = lastI;
+          else idx.push(lastI);
+        }
+      }
+
+      // กันซ้อนต้นทางอีกชั้น (ถ้าตัวที่สองยังเข้าใกล้ตัวแรกเกินไป ให้ลบทิ้ง)
       if (idx.length >= 2) {
-        const a = idx[idx.length - 2];
-        const b = idx[idx.length - 1];
-        const xa = xAt(a), xb = xAt(b);
-        const tsa = toTs(xs[a]), tsb = toTs(xs[b]);
-        if ((xb - xa) < X_MIN_LABEL_GAP_PX || (tsb - tsa) < X_LABEL_STEP_MS) {
-          idx.splice(idx.length - 2, 1);
+        const i0 = idx[0], i1 = idx[1];
+        const x0 = xAt(i0), x1 = xAt(i1);
+        const t0 = toTs(xs[i0]), t1 = toTs(xs[i1]);
+        if ((x1 - x0) < X_MIN_LABEL_GAP_PX || (t1 - t0) < X_LABEL_STEP_MS) {
+          idx.splice(1, 1); // เก็บตัวแรกไว้ ลบตัวที่สอง
         }
       }
+
       return idx;
     }
 
@@ -247,11 +259,13 @@
     labelsIdx.forEach((i) => {
       const x = xAt(i);
 
+      // เส้นตั้ง
       ctx.beginPath();
       ctx.moveTo(x, m.t);
       ctx.lineTo(x, H - m.b);
       ctx.stroke();
 
+      // ป้ายเวลา
       const d = xs[i];
       const label = d ? d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 
