@@ -1,5 +1,5 @@
 // display/app.js
-// Live dashboard: Y auto-scale, X เป็นเวลาแท้ ขีดทุก 1 นาที
+// Live dashboard: Y auto-scale (integer ticks), X เป็นเวลาแท้ ขีดทุก 1 นาที
 // หน้าต่างเวลา FIX 4 นาที + ป้ายเวลาเว้นสวย + กันไม่ให้ชนเส้นกราฟ + ตัดป้ายเวลาขวาสุด
 
 (function () {
@@ -137,17 +137,25 @@
   const floorToMinute = (ms) => Math.floor(ms / 60000) * 60000;
   const ceilToMinute  = (ms) => Math.ceil (ms / 60000) * 60000;
 
-  function niceTicks(min, max) {
-    const span = max - min;
-    const raw = span / (Y_GRID_LINES - 1);
-    const pow10 = Math.pow(10, Math.floor(Math.log10(raw)));
-    const steps = [1, 2, 2.5, 5, 10].map(v => v * pow10);
-    const step = steps.reduce((a, b) => Math.abs(a - raw) < Math.abs(b - raw) ? a : b);
-    const nmin = Math.floor(min / step) * step;
-    const nmax = Math.ceil(max / step) * step;
-    const exact = (nmax - nmin) / (Y_GRID_LINES - 1);
-    const ticks = Array.from({ length: Y_GRID_LINES }, (_, i) => nmin + exact * i);
-    return { min: nmin, max: nmax, step: exact, ticks };
+  // สร้าง tick จำนวนเต็มเสมอ (คงจำนวนเส้น = Y_GRID_LINES)
+  function niceIntTicks(min, max) {
+    // ครอบคลุมช่วงจริง
+    let step = Math.max(1, Math.ceil((max - min) / Math.max(1, (Y_GRID_LINES - 1))));
+    // จัด min/max ให้อยู่บนสเกลจำนวนเต็ม
+    let nmax = Math.ceil(max / step) * step;
+    let nmin = nmax - step * (Y_GRID_LINES - 1);
+    if (nmin > min) {
+      // ขยับให้ครอบคลุม min
+      nmin = Math.floor(min / step) * step;
+      nmax = nmin + step * (Y_GRID_LINES - 1);
+      if (nmax < max) {
+        const k = Math.ceil((max - nmax) / step);
+        nmax += k * step;
+        nmin = nmax - step * (Y_GRID_LINES - 1);
+      }
+    }
+    const ticks = Array.from({ length: Y_GRID_LINES }, (_, i) => nmin + step * i);
+    return { min: nmin, max: nmax, step, ticks };
   }
 
   function renderLineChart(canvas, xs, ys, opts = {}) {
@@ -186,7 +194,7 @@
 
     const xAtTs = (t) => m.l + iw * ((t - tMin) / Math.max(1, (tMax - tMin)));
 
-    // ===== Y: fixed หรือ auto (พร้อมระยะเผื่อ)
+    // ===== Y: fixed หรือ auto (พร้อมระยะเผื่อ) -> ทำ tick เป็นจำนวนเต็ม
     let ymin, ymax;
     if (opts.yRange && AXIS_MODE === "fixed") {
       ymin = opts.yRange.min; ymax = opts.yRange.max;
@@ -197,22 +205,21 @@
       ymin = vmin - pad;
       ymax = vmax + pad;
     }
-    const T = niceTicks(ymin, ymax);
+    const T = niceIntTicks(ymin, ymax);
     const yAt = (v) => m.t + ih - ih * ((v - T.min) / Math.max(1e-9, (T.max - T.min)));
 
-    // ===== Grid Y + labels (ยกป้าย Y ล่างสุดขึ้นเล็กน้อย)
+    // ===== Grid Y + labels (จำนวนเต็มเท่านั้น)
     ctx.strokeStyle = "rgba(255,255,255,.14)";
     ctx.lineWidth = 1;
     ctx.font = "12px system-ui, sans-serif";
     ctx.fillStyle = "rgba(255,255,255,.75)";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
-    const dec = T.step >= 1 ? 0 : (T.step >= 0.1 ? 1 : 2);
     T.ticks.forEach((tv, i) => {
       const y = yAt(tv);
       ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(W - m.r, y); ctx.stroke();
       const yLabel = (i === 0) ? (y - 8) : y;
-      ctx.fillText(tv.toFixed(dec), m.l - 6, yLabel);
+      ctx.fillText(String(Math.round(tv)), m.l - 6, yLabel);
     });
 
     // ===== Grid X: เส้นตั้งทุก 1 นาที
@@ -239,11 +246,8 @@
       const isStart = (t === startMin);
       const isEnd   = (t === endMin);
 
-      // ตัดป้ายเวลาขวาสุด
-      if (SKIP_END_LABEL && isEnd) continue;
-
-      // โชว์เฉพาะตำแหน่งที่เว้นไว้ หรือจุดเริ่ม
-      if (idx % labelEvery !== 0 && !isStart) continue;
+      if (SKIP_END_LABEL && isEnd) continue;           // ตัดป้ายขวาสุด
+      if (idx % labelEvery !== 0 && !isStart) continue; // โชว์เฉพาะที่เว้นไว้/จุดเริ่ม
 
       let x = xAtTs(t);
       const d = new Date(t);
