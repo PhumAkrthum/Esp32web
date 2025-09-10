@@ -1,5 +1,5 @@
 // display/app.js
-// ไม่มีเส้นกริด แต่คำนวณแกน/เวลาแม่น + ป้ายเวลาเว้นอัตโนมัติ
+// ไม่มีเส้นกริด + ไม่แสดงเวลา (X labels & "Now …") แต่พล็อตตามเวลาจริงถูกต้อง
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
   const API_BASE = CFG.API_BASE || "";
@@ -7,27 +7,28 @@
   const POLL_MS = (CFG.POLL_MS | 0) || 5000;
   const THRESH_SEC = CFG.ONLINE_THRESHOLD_SEC ?? CFG.THRESHOLD_SEC ?? CFG.STATUS_THRESHOLD_SEC ?? 30;
 
-  // ===== สวิตช์แสดงผล =====
-  const SHOW_GRID_X = false; // ❌ ไม่วาดเส้นตั้ง
-  const SHOW_GRID_Y = false; // ❌ ไม่วาดเส้นนอน
-  const SHOW_Y_LABELS = true; // แสดงเลขสเกล Y (ไม่มีเส้น)
-  const LABEL_BG = true;      // พื้นหลังป้ายเวลา
-  const SKIP_END_LABEL = true;
+  // ===== toggles =====
+  const SHOW_GRID_X = false;
+  const SHOW_GRID_Y = false;
+  const SHOW_Y_LABELS = true;   // แสดงเฉพาะตัวเลขแกน Y
+  const SHOW_X_LABELS = false;  // ❌ ไม่แสดงป้ายเวลาแกน X
+  const SHOW_NOW_CLOCK = false; // ❌ ไม่แสดง "Now hh:mm:ss"
+  const LABEL_BG = true;
   const MIN_LABEL_PADDING = 8;
 
-  // ===== X window =====
-  const TIME_WINDOW_MIN = 4;
-  const TIME_WINDOW_MS  = TIME_WINDOW_MIN * 60 * 1000;
-  const X_TICK_MS       = 60 * 1000;
-
-  // ===== Y-axis =====
+  // ===== ranges =====
   const AXIS_MODE = "auto"; // "fixed" | "auto"
   const AXIS = {
     temp: { min: 20, max: 40 },
     hum:  { min: 40, max: 100 },
     dew:  { min: 10, max: 35 },
   };
-  const Y_GRID_LINES = 6; // ใช้แค่คำนวณตำแหน่ง label (ไม่วาดเส้น)
+  const Y_GRID_LINES = 6;
+
+  // ===== X window =====
+  const TIME_WINDOW_MIN = 4;
+  const TIME_WINDOW_MS  = TIME_WINDOW_MIN * 60 * 1000;
+  const X_TICK_MS       = 60 * 1000;
 
   let LIVE_POINTS = 50;
 
@@ -48,6 +49,11 @@
   el.yr && (el.yr.textContent = new Date().getFullYear());
   el.dev && (el.dev.textContent = DEVICE_ID);
   el.poll && (el.poll.textContent = (POLL_MS / 1000).toFixed(0) + "s");
+
+  // ซ่อน “Now …” ทั้งสามจุดถ้าไม่ใช้
+  if (!SHOW_NOW_CLOCK) {
+    document.querySelectorAll(".nowclock").forEach(n => (n.style.display = "none"));
+  }
 
   // ===== Theme =====
   const LS_KEY = "esp32-theme";
@@ -155,7 +161,8 @@
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const m = { l: 46, r: 12, t: 10, b: 52 };
+    // ลด bottom margin ถ้าไม่แสดงป้าย X
+    const m = { l: 46, r: 12, t: 10, b: SHOW_X_LABELS ? 52 : 24 };
     const W = cssW, H = cssH, iw = W - m.l - m.r, ih = H - m.t - m.b;
 
     ctx.clearRect(0, 0, W, H);
@@ -186,69 +193,23 @@
     const T = niceIntTicks(ymin, ymax);
     const yAt = (v) => m.t + ih - ih * ((v - T.min) / Math.max(1e-9, (T.max - T.min)));
 
-    // === ไม่มีเส้นกริด ===
+    // === ไม่วาดเส้นกริด ===
     if (SHOW_Y_LABELS) {
       ctx.font = "12px system-ui, sans-serif";
       ctx.fillStyle = "rgba(255,255,255,.75)";
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       T.ticks.forEach((tv) => {
-        const y = Math.round(yAt(tv));
-        ctx.fillText(String(Math.round(tv)), m.l - 6, y);
+        ctx.fillText(String(Math.round(tv)), m.l - 6, Math.round(yAt(tv)));
       });
     }
 
-    // === ป้ายเวลา (คำนวณตามความกว้างจริง, พยายามให้ห่าง 1 นาทีถ้าพอ) ===
-    ctx.textBaseline = "top";
-    const xLabelY = H - m.b + 8;
-    const startMin = floorToMinute(tMin);
-    const endMin   = ceilToMinute(tMax);
-    const totalMins = Math.max(1, Math.round((endMin - startMin) / 60000));
-
-    ctx.font = "12px system-ui, sans-serif";
-    const sampleW = ctx.measureText("11:11 AM").width;
-    const minGap  = sampleW + MIN_LABEL_PADDING * 2;
-    const maxLabels = Math.max(2, Math.floor(iw / minGap));
-    // step เริ่มที่ 1 นาที แล้วเพิ่มจนพอดีกับพื้นที่
-    let stepMin = 1;
-    while (Math.floor(totalMins / stepMin) + 1 > maxLabels) stepMin++;
-
-    let idx = 0, lastRight = -Infinity;
-    for (let t = startMin; t <= endMin; t += X_TICK_MS, idx++) {
-      const isStart = (t === startMin);
-      const isEnd   = (t === endMin);
-      if (SKIP_END_LABEL && isEnd) continue;
-      if (!isStart && (idx % stepMin) !== 0) continue;
-
-      let x = xAtTs(t);
-      const label = new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      ctx.textAlign = "center";
-
-      const w = ctx.measureText(label).width;
-      let left = x - w / 2, right = x + w / 2;
-
-      // clamp ขอบซ้าย/ขวา
-      if (left < m.l + MIN_LABEL_PADDING) { left = m.l + MIN_LABEL_PADDING; right = left + w; x = left + w / 2; }
-      if (right > W - m.r - MIN_LABEL_PADDING) { right = W - m.r - MIN_LABEL_PADDING; left = right - w; x = left + w / 2; }
-
-      if (!isStart && left <= lastRight + MIN_LABEL_PADDING) continue;
-
-      if (LABEL_BG) {
-        ctx.save();
-        ctx.fillStyle = "rgba(0,0,0,.28)";
-        const padX = 4, padY = 2, r = 4;
-        const bx = left - padX, by = xLabelY - padY, bw = w + padX * 2, bh = 16 + padY * 2;
-        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, r); ctx.fill(); }
-        else { ctx.fillRect(bx, by, bw, bh); }
-        ctx.restore();
-      }
-      ctx.fillStyle = "rgba(255,255,255,.92)";
-      ctx.fillText(label, x, xLabelY);
-
-      lastRight = right;
+    // === ไม่วาดป้ายเวลาแกน X ===
+    if (SHOW_X_LABELS) {
+      // (ถ้าภายหลังอยากเปิด ก็ย้าย logic ป้ายเวลามาวางตรงนี้ได้)
     }
 
-    // === เส้นกราฟ (clip เฉพาะโซน plot) ===
+    // === เส้นกราฟ (clip เฉพาะ plot area) ===
     ctx.save();
     ctx.beginPath();
     ctx.rect(m.l, m.t, iw, ih);
@@ -270,6 +231,7 @@
   let SERIES = { xs: [], t: [], h: [], d: [] };
 
   function setNowClock() {
+    if (!SHOW_NOW_CLOCK) return; // ❌ ไม่อัปเดต/ไม่แสดง
     const s = `Now ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
     el.nowT && (el.nowT.textContent = s);
     el.nowH && (el.nowH.textContent = s);
@@ -286,7 +248,7 @@
   function pickArray(j) { return Array.isArray(j) ? j : j?.data || []; }
   function parseReading(o) {
     const t  = Number(o.temperature ?? o.temp ?? o.t ?? o.value?.temperature);
-    const h  = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity); // ✅ แก้บั๊กตัวแปรหลุด
+    const h  = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
     const ts = o.updated_at ?? o.created_at ?? o.ts ?? o.time ?? o.at;
     return { t, h, at: ts ? new Date(ts) : new Date() };
   }
