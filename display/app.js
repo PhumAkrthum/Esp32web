@@ -27,8 +27,8 @@
   const X_TICK_MS       = 60 * 1000;
 
   // ป้ายเวลา
-  const TARGET_LABELS     = 5;   // จำนวนป้ายโดยประมาณ
-  const MIN_LABEL_PADDING = 8;   // padding ซ้าย/ขวา
+  const TARGET_LABELS     = 5;   // (ยังเก็บไว้เผื่ออนาคต)
+  const MIN_LABEL_PADDING = 4;   // ลด padding เพื่อลดอาการชน
   const LABEL_BG          = true;
   const SKIP_END_LABEL    = true;
 
@@ -215,7 +215,7 @@
     T.ticks.forEach((tv) => {
       const y = Math.round(yAt(tv)) + 0.5;
       ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(W - m.r, y); ctx.stroke();
-      ctx.fillText(String(Math.round(tv)), m.l - 6, y); // ทุกเส้นตรงกัน
+      ctx.fillText(String(Math.round(tv)), m.l - 6, y);
     });
 
     // ===== Grid X: เส้นตั้งทุก 1 นาที (คมด้วย .5px)
@@ -227,13 +227,13 @@
       ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
     }
 
-    // ===== ป้ายเวลา (เว้นสวย + กันซ้อน + ตัดป้ายขวาสุด)
+    // ===== ป้ายเวลา (ทุก 1 นาที + กันซ้อนอย่างนุ่มนวล + ตัดป้ายขวาสุด)
     ctx.textBaseline = "top";
     ctx.fillStyle = "rgba(255,255,255,.85)";
     const xLabelY = H - m.b + 8;
 
     const totalMins = Math.max(1, Math.round((endMin - startMin) / 60000));
-    const labelEvery = Math.max(1, Math.round(totalMins / (Math.max(2, TARGET_LABELS) - 1)));
+    const labelEvery = 1; // บังคับแสดงทุกนาที
 
     let idx = 0, lastRight = -Infinity;
     for (let t = startMin; t <= endMin; t += X_TICK_MS, idx++) {
@@ -245,15 +245,16 @@
       let x = xAtTs(t);
       const d = new Date(t);
       const label = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      let align = isStart ? "left" : "center";
+      let align = "center"; // จัดกึ่งกลางทุกป้าย
 
       ctx.textAlign = align;
       const w = ctx.measureText(label).width;
       const half = w / 2;
 
-      let left = x - (align === "center" ? half : 0);
-      let right = x + (align === "center" ? half : w);
+      let left = x - half;
+      let right = x + half;
 
+      // clamp ไม่ให้ชนซ้าย/ขวา
       if (left < m.l + MIN_LABEL_PADDING) {
         x += (m.l + MIN_LABEL_PADDING) - left;
         left = m.l + MIN_LABEL_PADDING; right = left + w;
@@ -263,7 +264,7 @@
         right = W - m.r - MIN_LABEL_PADDING; left = right - w;
       }
 
-      // >>> FIX: อย่าตัดป้ายตัวที่สอง แม้จะเข้าเงื่อนไขกันซ้อน
+      // อย่าตัดป้ายตัวที่สอง แม้จะเข้าเงื่อนไขกันซ้อน
       if (!isStart && idx > 1 && left <= lastRight + MIN_LABEL_PADDING) continue;
 
       if (LABEL_BG) {
@@ -277,7 +278,7 @@
       }
 
       ctx.fillStyle = "rgba(255,255,255,.92)";
-      ctx.textAlign = align;
+      ctx.textAlign = "center";
       ctx.fillText(label, x, xLabelY);
 
       lastRight = right;
@@ -322,7 +323,8 @@
   function pickArray(j) { return Array.isArray(j) ? j : j?.data || []; }
   function parseReading(o) {
     const t  = Number(o.temperature ?? o.temp ?? o.t ?? o.value?.temperature);
-    const h  = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
+    a = o.humidity ?? o.hum ?? o.h ?? o.value?.humidity;
+    const h  = Number(a);
     const ts = o.updated_at ?? o.created_at ?? o.ts ?? o.time ?? o.at;
     return { t, h, at: ts ? new Date(ts) : new Date() };
   }
