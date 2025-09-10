@@ -263,7 +263,8 @@
         right = W - m.r - MIN_LABEL_PADDING; left = right - w;
       }
 
-      if (!isStart && left <= lastRight + MIN_LABEL_PADDING) continue;
+      // >>> FIX: อย่าตัดป้ายตัวที่สอง แม้จะเข้าเงื่อนไขกันซ้อน
+      if (!isStart && idx > 1 && left <= lastRight + MIN_LABEL_PADDING) continue;
 
       if (LABEL_BG) {
         ctx.save();
