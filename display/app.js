@@ -1,6 +1,6 @@
 // display/app.js
 // Live dashboard: Y auto-scale (integer ticks, labels align), X = เวลาจริง เส้นทุก 1 นาที
-// หน้าต่างเวลา FIX 4 นาที + ป้ายเวลาเว้นสวย + กันซ้อน + ตัดป้ายเวลาขวาสุด
+// หน้าต่างเวลา FIX 4 นาที + ป้ายเวลาเว้นสวยอัตโนมัติ + กันซ้อน + ตัดป้ายเวลาขวาสุด
 // ป้องกันเส้นกราฟทะลุออกซ้าย/ขวา ด้วย clipping เฉพาะใน plot area
 
 (function () {
@@ -27,8 +27,8 @@
   const X_TICK_MS       = 60 * 1000;
 
   // ป้ายเวลา
-  const TARGET_LABELS     = 5;   // (ยังเก็บไว้เผื่ออนาคต)
-  const MIN_LABEL_PADDING = 4;   // ลด padding เพื่อลดอาการชน
+  const TARGET_LABELS     = 5;   // เป้าคร่าว ๆ (ใช้คู่กับการคำนวนตามความกว้าง)
+  const MIN_LABEL_PADDING = 8;   // padding ซ้าย/ขวา
   const LABEL_BG          = true;
   const SKIP_END_LABEL    = true;
 
@@ -227,13 +227,19 @@
       ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
     }
 
-    // ===== ป้ายเวลา (ทุก 1 นาที + กันซ้อนอย่างนุ่มนวล + ตัดป้ายขวาสุด)
+    // ===== ป้ายเวลา (เว้นสวยอัตโนมัติ + กันซ้อน + ตัดป้ายขวาสุด)
     ctx.textBaseline = "top";
     ctx.fillStyle = "rgba(255,255,255,.85)";
     const xLabelY = H - m.b + 8;
 
     const totalMins = Math.max(1, Math.round((endMin - startMin) / 60000));
-    const labelEvery = 1; // บังคับแสดงทุกนาที
+
+    // คำนวณจำนวนป้ายสูงสุดตามความกว้างจริงของกราฟ
+    const sampleW = ctx.measureText("11:11 AM").width;
+    const minGap = sampleW + MIN_LABEL_PADDING * 2;
+    const maxLabels = Math.max(2, Math.floor(iw / minGap));
+    const target = Math.max(2, Math.min(TARGET_LABELS, maxLabels));
+    const labelEvery = Math.max(1, Math.ceil(totalMins / (target - (SKIP_END_LABEL ? 1 : 0))));
 
     let idx = 0, lastRight = -Infinity;
     for (let t = startMin; t <= endMin; t += X_TICK_MS, idx++) {
@@ -245,27 +251,27 @@
       let x = xAtTs(t);
       const d = new Date(t);
       const label = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      let align = "center"; // จัดกึ่งกลางทุกป้าย
+      let align = isStart ? "left" : "center";
 
       ctx.textAlign = align;
       const w = ctx.measureText(label).width;
-      const half = w / 2;
-
-      let left = x - half;
-      let right = x + half;
+      let left = x - (align === "center" ? w / 2 : 0);
+      let right = left + w;
 
       // clamp ไม่ให้ชนซ้าย/ขวา
       if (left < m.l + MIN_LABEL_PADDING) {
-        x += (m.l + MIN_LABEL_PADDING) - left;
-        left = m.l + MIN_LABEL_PADDING; right = left + w;
+        left = m.l + MIN_LABEL_PADDING;
+        right = left + w;
+        x = align === "center" ? left + w / 2 : left;
       }
       if (right > W - m.r - MIN_LABEL_PADDING) {
-        x -= right - (W - m.r - MIN_LABEL_PADDING);
-        right = W - m.r - MIN_LABEL_PADDING; left = right - w;
+        right = W - m.r - MIN_LABEL_PADDING;
+        left = right - w;
+        x = align === "center" ? left + w / 2 : left;
       }
 
-      // อย่าตัดป้ายตัวที่สอง แม้จะเข้าเงื่อนไขกันซ้อน
-      if (!isStart && idx > 1 && left <= lastRight + MIN_LABEL_PADDING) continue;
+      // กันซ้อน (ไม่มีข้อยกเว้นป้ายตัวที่สองอีกแล้ว)
+      if (!isStart && left <= lastRight + MIN_LABEL_PADDING) continue;
 
       if (LABEL_BG) {
         ctx.save();
@@ -278,7 +284,6 @@
       }
 
       ctx.fillStyle = "rgba(255,255,255,.92)";
-      ctx.textAlign = "center";
       ctx.fillText(label, x, xLabelY);
 
       lastRight = right;
@@ -323,8 +328,7 @@
   function pickArray(j) { return Array.isArray(j) ? j : j?.data || []; }
   function parseReading(o) {
     const t  = Number(o.temperature ?? o.temp ?? o.t ?? o.value?.temperature);
-    a = o.humidity ?? o.hum ?? o.h ?? o.value?.humidity;
-    const h  = Number(a);
+    const h  = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
     const ts = o.updated_at ?? o.created_at ?? o.ts ?? o.time ?? o.at;
     return { t, h, at: ts ? new Date(ts) : new Date() };
   }
@@ -412,10 +416,11 @@
     }
   }
 
-  // ===== boot =====.
+  // ===== boot =====
   setupRangeButtons();
   refresh();
   loadHistory(LIVE_POINTS);
   setInterval(refresh, Math.max(3000, POLL_MS));
   setInterval(setNowClock, 1000);
 })();
+ดกิด
