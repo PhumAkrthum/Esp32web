@@ -1,8 +1,5 @@
 // display/app.js
-// Live dashboard: Y auto-scale (integer ticks, labels align), X = เวลาจริง เส้นทุก 1 นาที
-// หน้าต่างเวลา FIX 4 นาที + ป้ายเวลาเว้นสวยอัตโนมัติ + กันซ้อน + ตัดป้ายเวลาขวาสุด
-// ป้องกันเส้นกราฟทะลุออกซ้าย/ขวา ด้วย clipping เฉพาะใน plot area
-
+// Live dashboard: ไม่มีเส้น Grid, คำนวณแกนถูกต้อง, ป้ายเวลาเว้นอัตโนมัติ
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
   const API_BASE = CFG.API_BASE || "";
@@ -10,59 +7,46 @@
   const POLL_MS = (CFG.POLL_MS | 0) || 5000;
   const THRESH_SEC = CFG.ONLINE_THRESHOLD_SEC ?? CFG.THRESHOLD_SEC ?? CFG.STATUS_THRESHOLD_SEC ?? 30;
 
-  // ===== คอนฟิกกราฟ =====
+  // ===== Toggle =====
+  const SHOW_GRID_X = false; // ❌ ไม่วาดเส้นตั้ง
+  const SHOW_GRID_Y = false; // ❌ ไม่วาดเส้นนอน
+  const LABEL_BG    = true;  // พื้นหลังป้ายเวลา
+  const SKIP_END_LABEL = true;
+  const MIN_LABEL_PADDING = 8;
+
+  // ===== Y-axis config (auto or fixed) =====
   const AXIS_MODE = "auto"; // "fixed" | "auto"
   const AXIS = {
-    temp: { min: 31.5, max: 33.5 }, // ใช้เมื่อ AXIS_MODE = "fixed"
-    hum:  { min: 60,   max: 90   },
-    dew:  { min: 26,   max: 32   },
+    temp: { min: 20, max: 40 },
+    hum:  { min: 40, max: 100 },
+    dew:  { min: 10, max: 35 },
   };
+  const Y_GRID_LINES = 6; // ใช้คำนวณ tick (แม้ไม่วาดเส้น grid ก็ตาม)
 
-  let LIVE_POINTS = 50;            // ใช้ร่วมกับปุ่ม Last 50/200/500
-  const Y_GRID_LINES = 6;
-
-  // === X: เส้นทุก 1 นาที + หน้าต่างคงที่ 4 นาที ===
+  // ===== X window =====
   const TIME_WINDOW_MIN = 4;
   const TIME_WINDOW_MS  = TIME_WINDOW_MIN * 60 * 1000;
   const X_TICK_MS       = 60 * 1000;
 
-  // ป้ายเวลา
-  const TARGET_LABELS     = 5;   // เป้าคร่าว ๆ (ใช้คู่กับการคำนวนตามความกว้าง)
-  const MIN_LABEL_PADDING = 8;   // padding ซ้าย/ขวา
-  const LABEL_BG          = true;
-  const SKIP_END_LABEL    = true;
+  let LIVE_POINTS = 50;
 
   const $ = (s) => document.querySelector(s);
   const el = {
     status: $("#status"),
-    temp: $("#temp"),
-    hum: $("#hum"),
-    dew: $("#dew"),
-    last: $("#last"),
-    dev: $("#dev"),
-    poll: $("#poll"),
-    tempRing: $("#tempRing"),
-    humBar: $("#humBar"),
-    card: $("#card"),
-
-    chartT: $("#chartT"),
-    chartH: $("#chartH"),
-    chartD: $("#chartD"),
-
+    temp: $("#temp"), hum: $("#hum"), dew: $("#dew"),
+    last: $("#last"), dev: $("#dev"), poll: $("#poll"),
+    tempRing: $("#tempRing"), humBar: $("#humBar"), card: $("#card"),
+    chartT: $("#chartT"), chartH: $("#chartH"), chartD: $("#chartD"),
     lastT: $("#lastT"),  nowT: $("#nowT"),
     lastH: $("#lastH"),  nowH: $("#nowH"),
     lastD: $("#lastD"),  nowD: $("#nowD"),
-
-    themeToggle: $("#themeToggle"),
-    yr: $("#yr"),
-    empty: $("#emptyHint"),
+    themeToggle: $("#themeToggle"), yr: $("#yr"), empty: $("#emptyHint"),
   };
 
   el.yr && (el.yr.textContent = new Date().getFullYear());
   el.dev && (el.dev.textContent = DEVICE_ID);
   el.poll && (el.poll.textContent = (POLL_MS / 1000).toFixed(0) + "s");
 
-  // ===== Theme =====
   const LS_KEY = "esp32-theme";
   const setTheme = (m) => {
     document.documentElement.classList.toggle("light", m === "light");
@@ -73,7 +57,6 @@
     setTheme((localStorage.getItem(LS_KEY) || "dark") === "dark" ? "light" : "dark");
   });
 
-  // ===== Helpers =====
   async function fetchJSON(url) {
     const r = await fetch(url, { cache: "no-store" });
     if (!r.ok) throw new Error(`HTTP ${r.status} @ ${url}`);
@@ -109,8 +92,7 @@
     el.dew && (el.dew.textContent = isFinite(dp) ? dp.toFixed(1) : "--.-");
   }
 
-  // ===== API Endpoints =====
-  const URL_STATUS = `${API_BASE}/api/status/${encodeURIComponent(DEVICE_ID)}?threshold_sec=${THRESH_SEC}`;
+  const URL_STATUS  = `${API_BASE}/api/status/${encodeURIComponent(DEVICE_ID)}?threshold_sec=${THRESH_SEC}`;
   const URL_LATESTS = [
     `${API_BASE}/api/readings/latest?device_id=${encodeURIComponent(DEVICE_ID)}`,
     `${API_BASE}/api/last/${encodeURIComponent(DEVICE_ID)}`,
@@ -133,12 +115,11 @@
     return null;
   }
 
-  // ===== วาดกราฟ (Canvas 2D) =====
+  // ========= Drawing =========
   const toMs = (v) => (v instanceof Date ? v.getTime() : new Date(v).getTime());
   const floorToMinute = (ms) => Math.floor(ms / 60000) * 60000;
   const ceilToMinute  = (ms) => Math.ceil (ms / 60000) * 60000;
 
-  // ทำ tick Y เป็นจำนวนเต็ม และคงจำนวนเส้น = Y_GRID_LINES
   function niceIntTicks(min, max) {
     let step = Math.max(1, Math.ceil((max - min) / Math.max(1, (Y_GRID_LINES - 1))));
     let nmax = Math.ceil(max / step) * step;
@@ -159,40 +140,33 @@
   function renderLineChart(canvas, xs, ys, opts = {}) {
     if (!canvas) return;
 
-    // Retina-safe size
-    const dpr = window.devicePixelRatio || 1;
+    const dpr  = window.devicePixelRatio || 1;
     const cssW = canvas.clientWidth || 560;
     const cssH = canvas.clientHeight || 190;
-    canvas.width = Math.round(cssW * dpr);
+    canvas.width  = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
 
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // พื้นที่วาด (เพิ่ม margin ล่างให้ป้ายไม่ชนกรอบ)
     const m = { l: 46, r: 12, t: 10, b: 52 };
-    const W = cssW, H = cssH;
-    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const W = cssW, H = cssH, iw = W - m.l - m.r, ih = H - m.t - m.b;
 
     ctx.clearRect(0, 0, W, H);
 
     if (!xs.length || !ys.length) {
-      ctx.fillStyle = "#fff";
-      ctx.globalAlpha = 0.8;
+      ctx.fillStyle = "rgba(255,255,255,.75)";
       ctx.font = "12px system-ui, sans-serif";
       ctx.fillText("No data", m.l + 8, m.t + 16);
-      ctx.globalAlpha = 1;
       return;
     }
 
-    // ===== X: 4 นาทีล่าสุดคงที่
     const tsArr = xs.map(toMs);
     let tMax = Math.max(...tsArr, Date.now());
     let tMin = tMax - TIME_WINDOW_MS;
-
     const xAtTs = (t) => m.l + iw * ((t - tMin) / Math.max(1, (tMax - tMin)));
 
-    // ===== Y: auto/fixed + integer ticks
+    // Y range
     let ymin, ymax;
     if (opts.yRange && AXIS_MODE === "fixed") {
       ymin = opts.yRange.min; ymax = opts.yRange.max;
@@ -205,40 +179,28 @@
     const T = niceIntTicks(ymin, ymax);
     const yAt = (v) => m.t + ih - ih * ((v - T.min) / Math.max(1e-9, (T.max - T.min)));
 
-    // ===== Grid Y + labels (เลขตรงเส้นพอดี + เส้นคมด้วย .5px)
-    ctx.strokeStyle = "rgba(255,255,255,.14)";
-    ctx.lineWidth = 1;
+    // (ไม่วาดเส้น grid Y/X)
+    // แต่ยังคงวาดตัวเลข Y ชิดซ้าย เพื่อบอกสเกล
     ctx.font = "12px system-ui, sans-serif";
     ctx.fillStyle = "rgba(255,255,255,.75)";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     T.ticks.forEach((tv) => {
-      const y = Math.round(yAt(tv)) + 0.5;
-      ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(W - m.r, y); ctx.stroke();
+      const y = Math.round(yAt(tv));
       ctx.fillText(String(Math.round(tv)), m.l - 6, y);
     });
 
-    // ===== Grid X: เส้นตั้งทุก 1 นาที (คมด้วย .5px)
+    // เส้นตั้งทุก 1 นาที (ไม่วาด), เหลือเฉพาะ "ป้ายเวลา" ด้านล่างแบบเว้นอัตโนมัติ
+    ctx.textBaseline = "top";
+    const xLabelY = H - m.b + 8;
     const startMin = floorToMinute(tMin);
     const endMin   = ceilToMinute(tMax);
-    for (let t = startMin; t <= endMin; t += X_TICK_MS) {
-      const x = Math.round(xAtTs(t)) + 0.5;
-      ctx.strokeStyle = "rgba(255,255,255,.14)";
-      ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
-    }
-
-    // ===== ป้ายเวลา (เว้นสวยอัตโนมัติ + กันซ้อน + ตัดป้ายขวาสุด)
-    ctx.textBaseline = "top";
-    ctx.fillStyle = "rgba(255,255,255,.85)";
-    const xLabelY = H - m.b + 8;
-
     const totalMins = Math.max(1, Math.round((endMin - startMin) / 60000));
 
-    // คำนวณจำนวนป้ายสูงสุดตามความกว้างจริงของกราฟ
     const sampleW = ctx.measureText("11:11 AM").width;
-    const minGap = sampleW + MIN_LABEL_PADDING * 2;
+    const minGap  = sampleW + MIN_LABEL_PADDING * 2;
     const maxLabels = Math.max(2, Math.floor(iw / minGap));
-    const target = Math.max(2, Math.min(TARGET_LABELS, maxLabels));
+    const target = Math.max(2, Math.min(5, maxLabels));
     const labelEvery = Math.max(1, Math.ceil(totalMins / (target - (SKIP_END_LABEL ? 1 : 0))));
 
     let idx = 0, lastRight = -Infinity;
@@ -249,28 +211,21 @@
       if (idx % labelEvery !== 0 && !isStart) continue;
 
       let x = xAtTs(t);
-      const d = new Date(t);
-      const label = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      let align = isStart ? "left" : "center";
+      const label = new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      ctx.textAlign = isStart ? "left" : "center";
 
-      ctx.textAlign = align;
       const w = ctx.measureText(label).width;
-      let left = x - (align === "center" ? w / 2 : 0);
+      let left = x - (isStart ? 0 : w / 2);
       let right = left + w;
 
-      // clamp ไม่ให้ชนซ้าย/ขวา
       if (left < m.l + MIN_LABEL_PADDING) {
-        left = m.l + MIN_LABEL_PADDING;
-        right = left + w;
-        x = align === "center" ? left + w / 2 : left;
+        left = m.l + MIN_LABEL_PADDING; right = left + w;
+        x = isStart ? left : left + w / 2;
       }
       if (right > W - m.r - MIN_LABEL_PADDING) {
-        right = W - m.r - MIN_LABEL_PADDING;
-        left = right - w;
-        x = align === "center" ? left + w / 2 : left;
+        right = W - m.r - MIN_LABEL_PADDING; left = right - w;
+        x = isStart ? left : left + w / 2;
       }
-
-      // กันซ้อน (ไม่มีข้อยกเว้นป้ายตัวที่สองอีกแล้ว)
       if (!isStart && left <= lastRight + MIN_LABEL_PADDING) continue;
 
       if (LABEL_BG) {
@@ -282,17 +237,15 @@
         else { ctx.fillRect(bx, by, bw, bh); }
         ctx.restore();
       }
-
       ctx.fillStyle = "rgba(255,255,255,.92)";
       ctx.fillText(label, x, xLabelY);
-
       lastRight = right;
     }
 
-    // ===== เส้นกราฟ (clip ไม่ให้ออกนอก plot area)
+    // Plot line (clip ในขอบ)
     ctx.save();
     ctx.beginPath();
-    ctx.rect(m.l, m.t, iw, ih);  // กรอบพล็อต
+    ctx.rect(m.l, m.t, iw, ih);
     ctx.clip();
 
     ctx.lineWidth = 2.2;
@@ -304,8 +257,7 @@
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
     ctx.stroke();
-
-    ctx.restore(); // ยกเลิก clip
+    ctx.restore();
   }
 
   // ===== state =====
@@ -369,24 +321,16 @@
     }
   }
 
-  // ===== ปุ่มเลือกจำนวนจุด =====
   function setupRangeButtons() {
     const btns = document.querySelectorAll(".range");
-    const setActive = (n) => {
-      btns.forEach(b => b.classList.toggle("active", Number(b.dataset.limit) === n));
-    };
-    btns.forEach(b => {
-      b.addEventListener("click", () => {
-        const n = Number(b.dataset.limit) || 50;
-        LIVE_POINTS = n;
-        setActive(n);
-        loadHistory(n);
-      });
-    });
+    const setActive = (n) => btns.forEach(b => b.classList.toggle("active", Number(b.dataset.limit) === n));
+    btns.forEach(b => b.addEventListener("click", () => {
+      const n = Number(b.dataset.limit) || 50;
+      LIVE_POINTS = n; setActive(n); loadHistory(n);
+    }));
     setActive(LIVE_POINTS);
   }
 
-  // ===== refresh latest + status =====
   async function refresh() {
     try {
       const [status, latest] = await Promise.all([
@@ -423,4 +367,3 @@
   setInterval(refresh, Math.max(3000, POLL_MS));
   setInterval(setNowClock, 1000);
 })();
-ดกิด
