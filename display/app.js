@@ -409,7 +409,7 @@
     }
   }
 
-  // ===== boot =====
+  // ===== boot =====.
   setupRangeButtons();
   refresh();
   loadHistory(LIVE_POINTS);
