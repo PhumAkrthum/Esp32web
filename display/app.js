@@ -1,6 +1,7 @@
 // display/app.js
-// Live dashboard: Y auto-scale (integer ticks aligned), X = เวลาจริง เส้นทุก 1 นาที
+// Live dashboard: Y auto-scale (integer ticks, labels align), X = เวลาจริง เส้นทุก 1 นาที
 // หน้าต่างเวลา FIX 4 นาที + ป้ายเวลาเว้นสวย + กันซ้อน + ตัดป้ายเวลาขวาสุด
+// ป้องกันเส้นกราฟทะลุออกซ้าย/ขวา ด้วย clipping เฉพาะใน plot area
 
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
@@ -17,7 +18,7 @@
     dew:  { min: 26,   max: 32   },
   };
 
-  let LIVE_POINTS = 50;           // ใช้ร่วมกับปุ่ม Last 50/200/500
+  let LIVE_POINTS = 50;            // ใช้ร่วมกับปุ่ม Last 50/200/500
   const Y_GRID_LINES = 6;
 
   // === X: เส้นทุก 1 นาที + หน้าต่างคงที่ 4 นาที ===
@@ -184,7 +185,7 @@
       return;
     }
 
-    // ===== X: 4 นาทีล่าสุด
+    // ===== X: 4 นาทีล่าสุดคงที่
     const tsArr = xs.map(toMs);
     let tMax = Math.max(...tsArr, Date.now());
     let tMin = tMax - TIME_WINDOW_MS;
@@ -204,7 +205,7 @@
     const T = niceIntTicks(ymin, ymax);
     const yAt = (v) => m.t + ih - ih * ((v - T.min) / Math.max(1e-9, (T.max - T.min)));
 
-    // ===== Grid Y + labels (จัดเลขตรงเส้นพอดี + เส้นคมด้วย .5px)
+    // ===== Grid Y + labels (เลขตรงเส้นพอดี + เส้นคมด้วย .5px)
     ctx.strokeStyle = "rgba(255,255,255,.14)";
     ctx.lineWidth = 1;
     ctx.font = "12px system-ui, sans-serif";
@@ -212,20 +213,18 @@
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
     T.ticks.forEach((tv) => {
-      const y = yAt(tv);
-      const yLine = Math.round(y) + 0.5; // crisp line
-      ctx.beginPath(); ctx.moveTo(m.l, yLine); ctx.lineTo(W - m.r, yLine); ctx.stroke();
-      ctx.fillText(String(Math.round(tv)), m.l - 6, yLine); // ไม่ยกเลขเส้นล่างแล้ว
+      const y = Math.round(yAt(tv)) + 0.5;
+      ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(W - m.r, y); ctx.stroke();
+      ctx.fillText(String(Math.round(tv)), m.l - 6, y); // ทุกเส้นตรงกัน
     });
 
-    // ===== Grid X: เส้นตั้งทุก 1 นาที (คมชัดด้วย .5px)
+    // ===== Grid X: เส้นตั้งทุก 1 นาที (คมด้วย .5px)
     const startMin = floorToMinute(tMin);
     const endMin   = ceilToMinute(tMax);
     for (let t = startMin; t <= endMin; t += X_TICK_MS) {
-      const x = xAtTs(t);
-      const xLine = Math.round(x) + 0.5;
+      const x = Math.round(xAtTs(t)) + 0.5;
       ctx.strokeStyle = "rgba(255,255,255,.14)";
-      ctx.beginPath(); ctx.moveTo(xLine, m.t); ctx.lineTo(xLine, H - m.b); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
     }
 
     // ===== ป้ายเวลา (เว้นสวย + กันซ้อน + ตัดป้ายขวาสุด)
@@ -237,7 +236,6 @@
     const labelEvery = Math.max(1, Math.round(totalMins / (Math.max(2, TARGET_LABELS) - 1)));
 
     let idx = 0, lastRight = -Infinity;
-
     for (let t = startMin; t <= endMin; t += X_TICK_MS, idx++) {
       const isStart = (t === startMin);
       const isEnd   = (t === endMin);
@@ -284,7 +282,12 @@
       lastRight = right;
     }
 
-    // ===== เส้นกราฟ
+    // ===== เส้นกราฟ (clip ไม่ให้ออกนอก plot area)
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(m.l, m.t, iw, ih);  // กรอบพล็อต
+    ctx.clip();
+
     ctx.lineWidth = 2.2;
     ctx.strokeStyle = opts.stroke || "rgba(96,165,250,.95)";
     ctx.beginPath();
@@ -294,6 +297,8 @@
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     });
     ctx.stroke();
+
+    ctx.restore(); // ยกเลิก clip
   }
 
   // ===== state =====
