@@ -1,4 +1,4 @@
-// display/app.js  (copy–paste ทับไฟล์เดิมได้เลย)
+// display/app.js  (with grid lines)
 
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
@@ -8,11 +8,11 @@
   const THRESH_SEC = CFG.ONLINE_THRESHOLD_SEC ?? CFG.THRESHOLD_SEC ?? CFG.STATUS_THRESHOLD_SEC ?? 30;
 
   // ===== toggles =====
-  const SHOW_GRID_X = false;
-  const SHOW_GRID_Y = false;
+  const SHOW_GRID_X = true;    // ← แสดงกริดแนวตั้ง (แกนเวลา)
+  const SHOW_GRID_Y = true;    // ← แสดงกริดแนวนอน (ค่า)
   const SHOW_Y_LABELS = true;
-  const SHOW_X_LABELS = true;    // <-- เปิดป้ายเวลาแกน X
-  const SHOW_NOW_CLOCK = true;   // <-- เปิด "Now …" มุมการ์ด
+  const SHOW_X_LABELS = true;  // ป้ายเวลาแกน X
+  const SHOW_NOW_CLOCK = true; // ป้าย "Now …" บนการ์ด
   const LABEL_BG = true;
   const MIN_LABEL_PADDING = 8;
 
@@ -26,9 +26,9 @@
   const Y_GRID_LINES = 6;
 
   // ===== X window =====
-  const TIME_WINDOW_MIN = 4;
+  const TIME_WINDOW_MIN = 4;                 // ระยะเวลาที่แสดงบนกราฟ (นาที)
   const TIME_WINDOW_MS  = TIME_WINDOW_MIN * 60 * 1000;
-  const X_TICK_MS       = 60 * 1000; // ติ๊กทุก 1 นาที
+  const X_TICK_MS       = 60 * 1000;         // เส้นกริด/ป้ายเวลา ทุก 1 นาที
 
   let LIVE_POINTS = 50;
 
@@ -50,10 +50,7 @@
   el.dev && (el.dev.textContent = DEVICE_ID);
   el.poll && (el.poll.textContent = (POLL_MS / 1000).toFixed(0) + "s");
 
-  // โชว์/ซ่อน “Now …”
-  if (!SHOW_NOW_CLOCK) {
-    document.querySelectorAll(".nowclock").forEach(n => (n.style.display = "none"));
-  }
+  if (!SHOW_NOW_CLOCK) document.querySelectorAll(".nowclock").forEach(n => (n.style.display = "none"));
 
   // ===== Theme =====
   const LS_KEY = "esp32-theme";
@@ -193,6 +190,28 @@
     const T = niceIntTicks(ymin, ymax);
     const yAt = (v) => m.t + ih - ih * ((v - T.min) / Math.max(1e-9, (T.max - T.min)));
 
+    // === GRID LINES ===
+    // แนวนอน (Y)
+    if (SHOW_GRID_Y) {
+      ctx.strokeStyle = "rgba(255,255,255,.10)";
+      ctx.lineWidth = 1;
+      T.ticks.forEach((tv) => {
+        const y = Math.round(yAt(tv));
+        ctx.beginPath(); ctx.moveTo(m.l, y); ctx.lineTo(W - m.r, y); ctx.stroke();
+      });
+    }
+    // แนวตั้ง (X) ที่ตำแหน่งเวลาตาม X_TICK_MS
+    if (SHOW_GRID_X) {
+      const tStart = floorToMinute(tMin);
+      const tEnd   = ceilToMinute (tMax);
+      ctx.strokeStyle = "rgba(255,255,255,.08)";
+      ctx.lineWidth = 1;
+      for (let t = tStart; t <= tEnd; t += X_TICK_MS) {
+        const x = Math.round(xAtTs(t));
+        ctx.beginPath(); ctx.moveTo(x, m.t); ctx.lineTo(x, H - m.b); ctx.stroke();
+      }
+    }
+
     // === ป้ายแกน Y ===
     if (SHOW_Y_LABELS) {
       ctx.font = "12px system-ui, sans-serif";
@@ -204,25 +223,32 @@
       });
     }
 
-    // === ป้ายเวลาแกน X ===
+    // === ป้ายเวลาแกน X (กันล้ำขอบ) ===
     if (SHOW_X_LABELS) {
       ctx.font = "12px system-ui, sans-serif";
       ctx.fillStyle = "rgba(255,255,255,.75)";
-      ctx.textAlign = "center";
       ctx.textBaseline = "top";
 
+      const PAD = 10;
       const tStart = floorToMinute(tMin);
       const tEnd   = ceilToMinute (tMax);
+
       for (let t = tStart; t <= tEnd; t += X_TICK_MS) {
         const x = Math.round(xAtTs(t));
 
-        // tick mark เล็ก ๆ
+        // tick สั้นๆ
         ctx.strokeStyle = "rgba(255,255,255,.18)";
         ctx.beginPath(); ctx.moveTo(x, H - m.b); ctx.lineTo(x, H - m.b + 6); ctx.stroke();
 
-        // label เวลา HH:MM
+        // ชิดซ้าย/ขวาเมื่อใกล้ขอบ
+        let align = "center";
+        if (x <= m.l + PAD)       align = "left";
+        else if (x >= W - m.r-PAD)align = "right";
+        ctx.textAlign = align;
+
+        const xClamped = Math.max(m.l + PAD, Math.min(W - m.r - PAD, x));
         const lab = new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-        ctx.fillText(lab, x, H - m.b + 8);
+        ctx.fillText(lab, xClamped, H - m.b + 8);
       }
     }
 
@@ -265,9 +291,9 @@
   function pickArray(j) { return Array.isArray(j) ? j : j?.data || []; }
   function parseReading(o) {
     const t  = Number(o.temperature ?? o.temp ?? o.t ?? o.value?.temperature);
-    const h  = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
+    the_h  = Number(o.humidity    ?? o.hum  ?? o.h ?? o.value?.humidity);
     const ts = o.updated_at ?? o.created_at ?? o.ts ?? o.time ?? o.at;
-    return { t, h, at: ts ? new Date(ts) : new Date() };
+    return { t, h: the_h, at: ts ? new Date(ts) : new Date() };
   }
 
   async function loadHistory(limit = LIVE_POINTS) {
