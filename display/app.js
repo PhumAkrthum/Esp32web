@@ -1,5 +1,5 @@
-// display/app.js
-// ไม่มีเส้นกริด + ไม่แสดงเวลา (X labels & "Now …") แต่พล็อตตามเวลาจริงถูกต้อง
+// display/app.js  (copy–paste ทับไฟล์เดิมได้เลย)
+
 (function () {
   const CFG = window.CONFIG || window.DHT_CONFIG || {};
   const API_BASE = CFG.API_BASE || "";
@@ -10,9 +10,9 @@
   // ===== toggles =====
   const SHOW_GRID_X = false;
   const SHOW_GRID_Y = false;
-  const SHOW_Y_LABELS = true;   // แสดงเฉพาะตัวเลขแกน Y
-  const SHOW_X_LABELS = false;  // ❌ ไม่แสดงป้ายเวลาแกน X
-  const SHOW_NOW_CLOCK = false; // ❌ ไม่แสดง "Now hh:mm:ss"
+  const SHOW_Y_LABELS = true;
+  const SHOW_X_LABELS = true;    // <-- เปิดป้ายเวลาแกน X
+  const SHOW_NOW_CLOCK = true;   // <-- เปิด "Now …" มุมการ์ด
   const LABEL_BG = true;
   const MIN_LABEL_PADDING = 8;
 
@@ -28,7 +28,7 @@
   // ===== X window =====
   const TIME_WINDOW_MIN = 4;
   const TIME_WINDOW_MS  = TIME_WINDOW_MIN * 60 * 1000;
-  const X_TICK_MS       = 60 * 1000;
+  const X_TICK_MS       = 60 * 1000; // ติ๊กทุก 1 นาที
 
   let LIVE_POINTS = 50;
 
@@ -50,7 +50,7 @@
   el.dev && (el.dev.textContent = DEVICE_ID);
   el.poll && (el.poll.textContent = (POLL_MS / 1000).toFixed(0) + "s");
 
-  // ซ่อน “Now …” ทั้งสามจุดถ้าไม่ใช้
+  // โชว์/ซ่อน “Now …”
   if (!SHOW_NOW_CLOCK) {
     document.querySelectorAll(".nowclock").forEach(n => (n.style.display = "none"));
   }
@@ -161,7 +161,7 @@
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // ลด bottom margin ถ้าไม่แสดงป้าย X
+    // เว้นที่ด้านล่างมากขึ้นเมื่อแสดงป้ายเวลา
     const m = { l: 46, r: 12, t: 10, b: SHOW_X_LABELS ? 52 : 24 };
     const W = cssW, H = cssH, iw = W - m.l - m.r, ih = H - m.t - m.b;
 
@@ -193,7 +193,7 @@
     const T = niceIntTicks(ymin, ymax);
     const yAt = (v) => m.t + ih - ih * ((v - T.min) / Math.max(1e-9, (T.max - T.min)));
 
-    // === ไม่วาดเส้นกริด ===
+    // === ป้ายแกน Y ===
     if (SHOW_Y_LABELS) {
       ctx.font = "12px system-ui, sans-serif";
       ctx.fillStyle = "rgba(255,255,255,.75)";
@@ -204,9 +204,26 @@
       });
     }
 
-    // === ไม่วาดป้ายเวลาแกน X ===
+    // === ป้ายเวลาแกน X ===
     if (SHOW_X_LABELS) {
-      // (ถ้าภายหลังอยากเปิด ก็ย้าย logic ป้ายเวลามาวางตรงนี้ได้)
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.fillStyle = "rgba(255,255,255,.75)";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+
+      const tStart = floorToMinute(tMin);
+      const tEnd   = ceilToMinute (tMax);
+      for (let t = tStart; t <= tEnd; t += X_TICK_MS) {
+        const x = Math.round(xAtTs(t));
+
+        // tick mark เล็ก ๆ
+        ctx.strokeStyle = "rgba(255,255,255,.18)";
+        ctx.beginPath(); ctx.moveTo(x, H - m.b); ctx.lineTo(x, H - m.b + 6); ctx.stroke();
+
+        // label เวลา HH:MM
+        const lab = new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        ctx.fillText(lab, x, H - m.b + 8);
+      }
     }
 
     // === เส้นกราฟ (clip เฉพาะ plot area) ===
@@ -231,7 +248,7 @@
   let SERIES = { xs: [], t: [], h: [], d: [] };
 
   function setNowClock() {
-    if (!SHOW_NOW_CLOCK) return; // ❌ ไม่อัปเดต/ไม่แสดง
+    if (!SHOW_NOW_CLOCK) return;
     const s = `Now ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
     el.nowT && (el.nowT.textContent = s);
     el.nowH && (el.nowH.textContent = s);
