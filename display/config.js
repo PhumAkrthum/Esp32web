@@ -1,7 +1,7 @@
 window.CONFIG = {
   API_BASE: 'https://esp32web-7t94.onrender.com',
   DEVICE_ID: 'esp32-1',
-  // เพิ่มทั้งสอง key เผื่อ app.js เรียกชื่อใดชื่อหนึ่ง
+  
   ONLINE_THRESHOLD_SEC: 30,
   THRESHOLD_SEC: 30,
   POLL_MS: 5000
